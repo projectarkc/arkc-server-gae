@@ -9,11 +9,10 @@ import (
 	"net/url"
 	"time"
 	"bufio"
-	//"log"
-	//"bytes"
 
 	"appengine"
 	"appengine/urlfetch"
+	"appengine/datastore"
 )
 
 const (
@@ -24,6 +23,18 @@ const (
 var context appengine.Context
 //A very bad hack
 var forward string
+
+type endpoint struct {
+	address    string
+	password   string
+	sessionid  string
+}
+
+type client struct {
+	clientsha1 		string
+	clientpub    	string
+	clientprisha1   string
+}
 
 // Join two URL paths.
 // func pathJoin(a, b string) string {
@@ -75,15 +86,39 @@ func processRequest(forward string, payload io.Reader, sessionid string) (*http.
 	return c, nil
 }
 
-func getauthstring(body *bufio.Reader) (string, io.Reader, string, string, error) {
+func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, error) {
 	// TODO
 	//use datastore API and create what to send to the client
 	//return
-	// IP to send, string
+	// URL to send, string
 	// contents, io.Reader
 	// clientid, string
 	// password or authstring, string
 	// error
+	var record endpoint
+	sha1, _, err := body.Readline()
+	if err == nil {
+		return err
+	}
+	url, _, err := body.Readline()
+	if err == nil {
+		return err
+	}
+	mainpw, _, err := body.Readline()
+	if err == nil {
+		return err
+	}
+	q := datastore.NewQuery("client").
+        Filter("clientsha1 =", string(sha1[:])
+	keys, err := q.GetAll(ctx, &record)
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		return //TODO self create error
+	}
+	// TODO fetch auth string
+	return url, _, sha1, _, nil
 }
 
 func authverify(body *bufio.Reader, clientid string, authstring string) error{
