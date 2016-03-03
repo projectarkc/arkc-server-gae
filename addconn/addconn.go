@@ -9,6 +9,13 @@ import (
 	"net/url"
 	"time"
 	"bufio"
+	"fmt"
+	"bytes"
+
+	"crypto/rsa"
+	"crypto/rand"
+    "crypto/x509"
+    "encoding/pem"
 
 	"appengine"
 	"appengine/urlfetch"
@@ -23,6 +30,9 @@ const (
 var context appengine.Context
 //A very bad hack
 var forward string
+
+var serverpri rsa.PrivateKey
+var ready = false
 
 type endpoint struct {
 	address    string
@@ -86,6 +96,12 @@ func processRequest(forward string, payload io.Reader, sessionid string) (*http.
 	return c, nil
 }
 
+func loadserverkey(ctx appengine.Context) {
+	//load key from memcache or datastore
+	block, _ := pem.Decode(data)
+    serverpri, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
+}
+
 func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, error) {
 	// TODO
 	//use datastore API and create what to send to the client
@@ -95,30 +111,45 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	// clientid, string
 	// password or authstring, string
 	// error
-	var record endpoint
-	sha1, _, err := body.Readline()
+	var record []client
+
+	sha1, _, err := body.ReadLine()
 	if err == nil {
-		return err
+		return "", nil, "", "", err
 	}
-	url, _, err := body.Readline()
+	url, _, err := body.ReadLine()
 	if err == nil {
-		return err
+		return "", nil, "", "", err
 	}
-	mainpw, _, err := body.Readline()
+	mainpw, _, err := body.ReadLine()
 	if err == nil {
-		return err
+		return "", nil, "", "", err
 	}
-	q := datastore.NewQuery("client").
-        Filter("clientsha1 =", string(sha1[:])
-	keys, err := q.GetAll(ctx, &record)
+	//try to load from memcache
+	q := datastore.NewQuery("client").Limit(1).
+        Filter("clientsha1 =", string(sha1[:]))
+	_, err = q.GetAll(ctx, &record)
 	if err != nil {
-		return err
+		return "", nil, "", "", err
 	}
-	if len(keys) == 0 {
-		return //TODO self create error
+	if len(record) == 0 {
+		return "", nil, "", "", fmt.Errorf("not found")
 	}
-	// TODO fetch auth string
-	return url, _, sha1, _, nil
+	//write to memcache
+	sessionid := make([]byte, 16)
+	rand.Read(sessionid)
+	pubkey, err := x509.ParsePKIXPublicKey([]byte(record[0].clientpub))
+	if !ready {
+		loadserverkey(ctx)
+		ready = true
+	}
+
+	part1, _ := rsa.SignPKCS1v15(nil, &serverpri, 0, []byte(mainpw))
+	part2, _ := rsa.EncryptPKCS1v15(nil, pubkey.(*rsa.PublicKey), sessionid)
+	contents := bytes.NewBuffer(part1)
+	contents.Write(part2)
+	// TODO: length may change? manual split string?
+	return string(url[:]), contents, string(sha1[:]), string(sessionid[:]), nil
 }
 
 func authverify(body *bufio.Reader, clientid string, authstring string) error{
@@ -136,7 +167,7 @@ func storestring(sessionid string, authstring string) (io.Reader, error) {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	context = appengine.NewContext(r)
-	forward, payload, clientid, mainpasswd, err := getauthstring(bufio.NewReader(r.Body))
+	forward, payload, clientid, mainpasswd, err := getauthstring(bufio.NewReader(r.Body), context)
 	if err != nil {
 		context.Errorf("parseRequest: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
