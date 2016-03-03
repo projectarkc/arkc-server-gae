@@ -1,6 +1,6 @@
 // A web app for Google App Engine that proxies HTTP requests and responses to a
 // Tor relay running meek-server.
-package reflect
+package addconn
 
 import (
 	"io"
@@ -17,7 +17,6 @@ import (
 )
 
 const (
-		forwardURL = "http://home.arkc.org:3389/"
 	// A timeout of 0 means to use the App Engine default (5 seconds).
 	urlFetchTimeout = 20 * time.Second
 )
@@ -27,15 +26,15 @@ var context appengine.Context
 var forward string
 
 // Join two URL paths.
-func pathJoin(a, b string) string {
-	if len(a) > 0 && a[len(a)-1] == '/' {
-		a = a[:len(a)-1]
-	}
-	if len(b) == 0 || b[0] != '/' {
-		b = "/" + b
-	}
-	return a + b
-}
+// func pathJoin(a, b string) string {
+// 	if len(a) > 0 && a[len(a)-1] == '/' {
+// 		a = a[:len(a)-1]
+// 	}
+// 	if len(b) == 0 || b[0] != '/' {
+// 		b = "/" + b
+// 	}
+// 	return a + b
+// }
 
 // We reflect only a whitelisted set of header fields. In requests, the full
 // list includes things like User-Agent and X-Appengine-Country that the Tor
@@ -92,7 +91,7 @@ func authverify(body *bufio.Reader, clientid string, authstring string) error{
 	//verify if the password is correct
 }
 
-func storestring(clientid string, authstring string) (io.Reader, error) {
+func storestring(sessionid string, authstring string) (io.Reader, error) {
 	// TODO
 	//use Datastore and Memcache to store the string
 	//return

@@ -99,3 +99,4 @@ _testmain.go
 *.test
 *.prof
 
+*.sublime-*
