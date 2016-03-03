@@ -1,0 +1,15 @@
+application: arkc-gae
+module: fetchfrom
+version: 1
+runtime: python27
+api_version: 1
+threadsafe: true
+
+handlers:
+- url: /.*
+  script: gae.application
+  secure: optional
+
+libraries:
+- name: pycrypto
+  version: "latest"
