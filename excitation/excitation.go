@@ -27,6 +27,7 @@ type endpoint struct {
 	address    string
 	password   string
 	sessionid  string
+	idchar	   string
 }
 
 func roundTripTry(addr endpoint, transport urlfetch.Transport) error {

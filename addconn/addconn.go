@@ -38,6 +38,7 @@ type endpoint struct {
 	address    string
 	password   string
 	sessionid  string
+	idchar     string
 }
 
 type client struct {
@@ -102,7 +103,12 @@ func loadserverkey(ctx appengine.Context) {
     serverpri, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
 }
 
-func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, error) {
+func getpreviousindex(sha1 []byte, ctx appengine.Context) ([]byte, string, error) {
+	//load from memcache for the index of certain connection
+	//and return the self.i 10 ~ 99
+}
+
+func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, string, error) {
 	// TODO
 	//use datastore API and create what to send to the client
 	//return
@@ -110,30 +116,35 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	// contents, io.Reader
 	// clientid, string
 	// password or authstring, string
+	// idchar, string
 	// error
 	var record []client
 
 	sha1, _, err := body.ReadLine()
 	if err == nil {
-		return "", nil, "", "", err
+		return "", nil, "", "", "", err
 	}
 	url, _, err := body.ReadLine()
 	if err == nil {
-		return "", nil, "", "", err
+		return "", nil, "", "", "", err
 	}
 	mainpw, _, err := body.ReadLine()
 	if err == nil {
-		return "", nil, "", "", err
+		return "", nil, "", "", "", err
+	}
+	previousrecord, idchar, err := getpreviousindex(sha1, ctx)
+	if err == nil {
+		return "", nil, "", "", "", err
 	}
 	//try to load from memcache
 	q := datastore.NewQuery("client").Limit(1).
         Filter("clientsha1 =", string(sha1[:]))
 	_, err = q.GetAll(ctx, &record)
 	if err != nil {
-		return "", nil, "", "", err
+		return "", nil, "", "", "", err
 	}
 	if len(record) == 0 {
-		return "", nil, "", "", fmt.Errorf("not found")
+		return "", nil, "", "", "", fmt.Errorf("not found")
 	}
 	//write to memcache
 	sessionid := make([]byte, 16)
@@ -148,8 +159,10 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	part2, _ := rsa.EncryptPKCS1v15(nil, pubkey.(*rsa.PublicKey), sessionid)
 	contents := bytes.NewBuffer(part1)
 	contents.Write(part2)
+	contents.WriteString(idchar)
+	contents.Write(previousrecord)
 	// TODO: length may change? manual split string?
-	return string(url[:]), contents, string(sha1[:]), string(sessionid[:]), nil
+	return string(url[:]), contents, string(sha1[:]), string(sessionid[:]), string(idchar[:]), nil
 }
 
 func authverify(body *bufio.Reader, clientid string, authstring string) error{
@@ -157,7 +170,7 @@ func authverify(body *bufio.Reader, clientid string, authstring string) error{
 	//verify if the password is correct
 }
 
-func storestring(sessionid string, authstring string) (io.Reader, error) {
+func storestring(url string, sessionid string, authstring string, idchar string) (io.Reader, error) {
 	// TODO
 	//use Datastore and Memcache to store the string
 	//return
@@ -167,7 +180,7 @@ func storestring(sessionid string, authstring string) (io.Reader, error) {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	context = appengine.NewContext(r)
-	forward, payload, clientid, mainpasswd, err := getauthstring(bufio.NewReader(r.Body), context)
+	forward, payload, clientid, mainpasswd, idchar, err := getauthstring(bufio.NewReader(r.Body), context)
 	if err != nil {
 		context.Errorf("parseRequest: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -202,7 +215,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	reply ,err := storestring(clientid, mainpasswd)
+	reply ,err := storestring(forward, clientid, mainpasswd, idchar)
 	if err != nil {
 		context.Errorf("Saving: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
