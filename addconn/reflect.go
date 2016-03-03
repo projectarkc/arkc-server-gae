@@ -59,10 +59,7 @@ func getClientAddr(r *http.Request) string {
 
 // Make a copy of r, with the URL being changed to be relative to forwardURL,
 // and including only the headers in reflectedHeaderFields.
-func processRequest() (forward string, payload io.Reader, sessionid string) {
-	if err != nil {
-		return nil, err
-	}
+func processRequest(forward string, payload io.Reader, sessionid string) (*http.Request, error){
 	u, err := url.Parse(forward)
 	if err != nil {
 		return nil, err
@@ -79,7 +76,7 @@ func processRequest() (forward string, payload io.Reader, sessionid string) {
 	return c, nil
 }
 
-func getauthstring(body bufio.Reader) (string, io.Reader, string, error) {
+func getauthstring(body *bufio.Reader) (string, io.Reader, string, string, error) {
 	// TODO
 	//use datastore API and create what to send to the client
 	//return
@@ -90,7 +87,7 @@ func getauthstring(body bufio.Reader) (string, io.Reader, string, error) {
 	// error
 }
 
-func authverify(body bufio.Reader, clientid string, authstring string) error{
+func authverify(body *bufio.Reader, clientid string, authstring string) error{
 	// TODO
 	//verify if the password is correct
 }
@@ -111,7 +108,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	sessionid = r.Header.Get("X-Session-Id")
+	sessionid := r.Header.Get("X-Session-Id")
 	fr, err := processRequest(forward, payload, sessionid)
 	if err != nil {
 		context.Errorf("processRequest: %s", err)
@@ -134,7 +131,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	err := authverify(resp.Body, clientid, mainpasswd)
+	err = authverify(bufio.NewReader(resp.Body), clientid, mainpasswd)
 	if err != nil {
 		context.Errorf("Authentication: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -152,6 +149,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		context.Errorf("io.Copy after %d bytes: %s", n, err)
 	}
+	// TODO
+	//fetch from the server immediately
 }
 
 func init() {
