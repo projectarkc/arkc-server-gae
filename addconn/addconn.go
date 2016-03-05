@@ -20,6 +20,7 @@ import (
 	"appengine"
 	"appengine/urlfetch"
 	"appengine/datastore"
+	"appengine/memcache"
 )
 
 const (
@@ -45,6 +46,11 @@ type client struct {
 	clientsha1 		string
 	clientpub    	string
 	clientprisha1   string
+}
+
+type server struct {
+	public	string
+	private	string
 }
 
 // Join two URL paths.
@@ -98,14 +104,33 @@ func processRequest(forward string, payload io.Reader, sessionid string) (*http.
 }
 
 func loadserverkey(ctx appengine.Context) {
-	//load key from memcache or datastore
-	block, _ := pem.Decode(data)
+	//load key from datastore or memcache
+	if item, err := memcache.Get(ctx, "serverpri"); err != memcache.ErrCacheMiss {
+        block, _ := pem.Decode(item.Value)
+	} else {
+		var record server
+		q := datastore.NewQuery("server").Limit(1)
+		_, err = q.GetAll(ctx, &record)
+		if err != nil {
+			context.Errorf("server key missing: %s", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		block, _ := pem.Decode([]byte(record.private))
+		item := &memcache.Item{
+			Key:	"server"
+			Value: 	[]byte(recprd.private)
+		}
+		_ = memcache.Add(ctx, item)
+	}
     serverpri, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
 }
 
 func getpreviousindex(sha1 []byte, ctx appengine.Context) ([]byte, string, error) {
 	//load from memcache for the index of certain connection
-	//and return the self.i 10 ~ 99
+	//and return:
+	// previous record, []byte
+	// self.i 10 ~ 99
 }
 
 func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, string, error) {
