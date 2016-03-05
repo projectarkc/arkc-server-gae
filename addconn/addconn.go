@@ -15,6 +15,7 @@ import (
 	"crypto/rsa"
 	"crypto/rand"
     "crypto/x509"
+    "crypto/aes"
     "encoding/pem"
 
 	"appengine"
@@ -38,6 +39,7 @@ var ready = false
 type endpoint struct {
 	address    string
 	password   string
+	iv         string
 	sessionid  string
 	idchar     string
 }
@@ -133,14 +135,15 @@ func getpreviousindex(sha1 []byte, ctx appengine.Context) ([]byte, string, error
 	// self.i 10 ~ 99
 }
 
-func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, string, error) {
+func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, string, string, error) {
 	// TODO
 	//use datastore API and create what to send to the client
 	//return
 	// URL to send, string
 	// contents, io.Reader
 	// clientid, string
-	// password or authstring, string
+	// password, string
+	// iv, string
 	// idchar, string
 	// error
 	var record []client
@@ -172,8 +175,8 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 		return "", nil, "", "", "", fmt.Errorf("not found")
 	}
 	//write to memcache
-	sessionid := make([]byte, 16)
-	rand.Read(sessionid)
+	sessionpassword := make([]byte, 16)
+	rand.Read(sessionpassword)
 	pubkey, err := x509.ParsePKIXPublicKey([]byte(record[0].clientpub))
 	if !ready {
 		loadserverkey(ctx)
@@ -181,31 +184,82 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	}
 
 	part1, _ := rsa.SignPKCS1v15(nil, &serverpri, 0, []byte(mainpw))
-	part2, _ := rsa.EncryptPKCS1v15(nil, pubkey.(*rsa.PublicKey), sessionid)
+	part2, _ := rsa.EncryptPKCS1v15(nil, pubkey.(*rsa.PublicKey), sessionpassword)
 	contents := bytes.NewBuffer(part1)
 	contents.Write(part2)
 	contents.WriteString(idchar)
 	contents.Write(previousrecord)
 	// TODO: length may change? manual split string?
-	return string(url[:]), contents, string(sha1[:]), string(sessionid[:]), string(idchar[:]), nil
+	return string(url[:]), contents, string(sha1[:]), string(sessionpassword[:]), string(mainpw[:]), string(idchar[:]), nil
 }
 
-func authverify(body *bufio.Reader, clientid string, authstring string) error{
-	// TODO
+func authverify(body *bufio.Reader, idchar string, authstring string, iv string) error {
 	//verify if the password is correct
+	value, _, err :=body.ReadLine()
+	if err == nil {
+		return err
+	}
+	aescipher, err = aes.NewCipher(authstring)
+	if err == nil {
+		return err
+	}
+	// TODO: Blocksize???
+	stream := cipher.NewCFBDecrypter(aescipher, []byte(iv))
+	stream.XORKeyStream(value, value)
+	if bytes.Compare(value, []byte("AUTHENTICATED" + idchar)) != 0 {
+		return fmt.Errorf("AUTH FAIL")
+	} else {
+		//TODO throw the rest to task queue?
+		return nil
+	}
+
 }
 
-func storestring(url string, sessionid string, authstring string, idchar string) (io.Reader, error) {
-	// TODO
+func storestring(ctx appengine.Context url string, sessionid string, authstring string, iv string, idchar string) (*io.Reader, error) {
 	//use Datastore and Memcache to store the string
 	//return
 	// current status, io.Reader
 	// error
+	record := endpoint{
+		address:	url
+		password:   authstring
+		iv:			iv
+		sessionid:  sessionid
+		idchar:     idchar
+	}
+	key := datastore.NewIncompleteKey(ctx, endpoint, nil)
+	_, err := datastore.Put(ctx, key, &record)
+	if err != nil {
+                http.Error(w, err.Error(), http.StatusInternalServerError)
+                return nil, err
+    }
+    items := [...]*memcache.Item{
+    	&memcache.Item{
+    		Key:	sessionid + ".address"
+    		Value:	[]byte(url)
+    	},
+    	&memcache.Item{
+    		Key:	sessionid + ".password"
+    		Value:	[]byte(authstring)
+    	},
+    	&memcache.Item{
+    		Key:	sessionid + ".iv"
+    		Value:	[]byte(iv)
+    	},
+    	&memcache.Item{
+    		Key:	sessionid + ".idchar"
+    		Value:	[]byte(idchar)
+    	}
+    }
+    _ := memcache.AddMulti(ctx, items)
+    // TODO get status
+    return bytes.NewBuffer([]byte("")), nil
+
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	context = appengine.NewContext(r)
-	forward, payload, clientid, mainpasswd, idchar, err := getauthstring(bufio.NewReader(r.Body), context)
+	forward, payload, clientid, passwd, iv, idchar, err := getauthstring(bufio.NewReader(r.Body), context)
 	if err != nil {
 		context.Errorf("parseRequest: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -234,13 +288,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	err = authverify(bufio.NewReader(resp.Body), clientid, mainpasswd)
+	err = authverify(bufio.NewReader(resp.Body), idchar, passwd, iv)
 	if err != nil {
 		context.Errorf("Authentication: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	reply ,err := storestring(forward, clientid, mainpasswd, idchar)
+	reply ,err := storestring(ctx, forward, clientid, passwd, iv, idchar)
 	if err != nil {
 		context.Errorf("Saving: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -248,7 +302,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Add("X-Session-Id", sessionid)
 	w.WriteHeader(resp.StatusCode)
-	n, err := io.Copy(w, reply)
+	n, err := io.Copy(w, &reply)
 	if err != nil {
 		context.Errorf("io.Copy after %d bytes: %s", n, err)
 	}
