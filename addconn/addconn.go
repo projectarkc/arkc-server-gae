@@ -110,18 +110,18 @@ func loadserverkey(ctx appengine.Context) {
 	if item, err := memcache.Get(ctx, "serverpri"); err != memcache.ErrCacheMiss {
         block, _ := pem.Decode(item.Value)
 	} else {
-		var record server
+		var record []server
 		q := datastore.NewQuery("server").Limit(1)
 		_, err = q.GetAll(ctx, &record)
-		if err != nil {
+		if (err != nil or len(record) == 0) {
 			context.Errorf("server key missing: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		block, _ := pem.Decode([]byte(record.private))
+		block, _ := pem.Decode([]byte(record[0].private))
 		item := &memcache.Item{
 			Key:	"server"
-			Value: 	[]byte(recprd.private)
+			Value: 	[]byte(recprd[0].private)
 		}
 		_ = memcache.Add(ctx, item)
 	}
