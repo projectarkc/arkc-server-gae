@@ -29,10 +29,6 @@ const (
 	urlFetchTimeout = 20 * time.Second
 )
 
-var context appengine.Context
-//A very bad hack
-var forward string
-
 var serverpri rsa.PrivateKey
 var ready = false
 
@@ -114,7 +110,7 @@ func loadserverkey(ctx appengine.Context) {
 		q := datastore.NewQuery("server").Limit(1)
 		_, err = q.GetAll(ctx, &record)
 		if (err != nil or len(record) == 0) {
-			context.Errorf("server key missing: %s", err)
+			ctx.Errorf("server key missing: %s", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -136,8 +132,6 @@ func getpreviousindex(sha1 []byte, ctx appengine.Context) ([]byte, string, error
 }
 
 func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, string, string, error) {
-	// TODO
-	//use datastore API and create what to send to the client
 	//return
 	// URL to send, string
 	// contents, io.Reader

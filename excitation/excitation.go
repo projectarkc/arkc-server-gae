@@ -21,10 +21,6 @@ const (
 	urlFetchTimeout = 20 * time.Second
 )
 
-var context appengine.Context
-//A very bad hack
-var forward string
-
 type endpoint struct {
 	address    string
 	password   string
@@ -37,13 +33,13 @@ func roundTripTry(addr endpoint, key *datastore.Key, transport urlfetch.Transpor
 	// TODO: What to send here?
 	fr, err := http.NewRequest("POST", addr.address, bytes.NewReader([]byte("")))
 	if err != nil {
-		context.Errorf("create request: %s", err)
+		ctx.Errorf("create request: %s", err)
 		return err
 	}
 	fr.Header.Add("X-Session-Id", addr.sessionid)
 	resp, err := transport.RoundTrip(fr)
 	if err != nil {
-		context.Errorf("connect: %s", err)
+		ctx.Errorf("connect: %s", err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -77,7 +73,7 @@ func getstatus() ([]endpoint, *[]datastore.Key) {
 
 func processendpoints(tasks []endpoint, keys, *[]datastore.Key, ctx appengine.Context) io.Reader {
 	tp := urlfetch.Transport{
-			Context: context,
+			Context: ctx,
 			// Despite the name, Transport.Deadline is really a timeout and
 			// not an absolute deadline as used in the net package. In
 			// other words it is a time.Duration, not a time.Time.
