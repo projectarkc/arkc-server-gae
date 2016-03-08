@@ -71,7 +71,7 @@ func getstatus() ([]endpoint, *[]datastore.Key) {
 	return records, keys
 }
 
-func processendpoints(tasks []endpoint, keys, *[]datastore.Key, ctx appengine.Context) io.Reader {
+func processendpoints(tasks []endpoint, keys *[]datastore.Key, ctx appengine.Context) io.Reader {
 	tp := urlfetch.Transport{
 			Context: ctx,
 			// Despite the name, Transport.Deadline is really a timeout and
@@ -99,7 +99,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		
 		n, err := io.Copy(w, processendpoints(tasks, keys, context))
 		if err != nil {
-		context.Errorf("io.Copy after %d bytes: %s", n, err)
+			context.Errorf("io.Copy after %d bytes: %s", n, err)
 		} else {
 			//write empty response
 		}
