@@ -22,9 +22,10 @@ from google.appengine.api.taskqueue.taskqueue import MAX_URL_LENGTH
 from google.appengine.runtime import apiproxy_errors
 
 URLFETCH_MAX = 2
-URLFETCH_MAXSIZE = 4*1024*1024
-URLFETCH_DEFLATE_MAXSIZE = 4*1024*1024
+URLFETCH_MAXSIZE = 4 * 1024 * 1024
+URLFETCH_DEFLATE_MAXSIZE = 4 * 1024 * 1024
 URLFETCH_TIMEOUT = 30
+
 
 def message_html(title, banner, detail=''):
     MESSAGE_TEMPLATE = '''
@@ -61,7 +62,9 @@ try:
     from Crypto.Cipher.ARC4 import new as RC4Cipher
 except ImportError:
     logging.warn('Load Crypto.Cipher.ARC4 Failed, Use Pure Python Instead.')
+
     class RC4Cipher(object):
+
         def __init__(self, key):
             x = 0
             box = range(256)
@@ -71,6 +74,7 @@ except ImportError:
             self.__box = box
             self.__x = 0
             self.__y = 0
+
         def encrypt(self, data):
             out = []
             out_append = out.append
@@ -99,43 +103,28 @@ def format_response(status, headers, content):
     if content:
         headers.pop('content-length', None)
         headers['Content-Length'] = str(len(content))
-    data = 'HTTP/1.1 %d %s\r\n%s\r\n\r\n%s' % (status, httplib.responses.get(status, 'Unknown'), '\r\n'.join('%s: %s' % (k.title(), v) for k, v in headers.items()), content)
+    data = 'HTTP/1.1 %d %s\r\n%s\r\n\r\n%s' % (status, httplib.responses.get(
+        status, 'Unknown'), '\r\n'.join('%s: %s' % (k.title(), v) for k, v in headers.items()), content)
     data = deflate(data)
     return struct.pack('!h', len(data)) + data
 
 
 def application(environ, start_response):
-    if environ['REQUEST_METHOD'] == 'GET' and 'HTTP_X_URLFETCH_PS1' not in environ:
-        timestamp = long(os.environ['CURRENT_VERSION_ID'].split('.')[1])/2**28
-        ctime = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(timestamp+8*3600))
-        start_response('200 OK', [('Content-Type', 'text/plain')])
-        yield 'GoAgent Python Server %s works, deployed at %s\n' % (__version__, ctime)
-        if len(__password__) > 2:
-            yield 'Password: %s%s%s' % (__password__[0], '*'*(len(__password__)-2), __password__[-1])
-        raise StopIteration
 
     start_response('200 OK', [('Content-Type', 'image/gif')])
-
-    if environ['REQUEST_METHOD'] == 'HEAD':
-        raise StopIteration
-
-    options = environ.get('HTTP_X_URLFETCH_OPTIONS', '')
-    if 'rc4' in options and not __password__:
-        yield format_response(400, {'Content-Type': 'text/html; charset=utf-8'}, message_html('400 Bad Request', 'Bad Request (options) - please set __password__ in gae.py', 'please set __password__ and upload gae.py again'))
-        raise StopIteration
 
     try:
         if 'HTTP_X_URLFETCH_PS1' in environ:
             payload = inflate(base64.b64decode(environ['HTTP_X_URLFETCH_PS1']))
-            body = inflate(base64.b64decode(environ['HTTP_X_URLFETCH_PS2'])) if 'HTTP_X_URLFETCH_PS2' in environ else ''
+            body = inflate(base64.b64decode(
+                environ['HTTP_X_URLFETCH_PS2'])) if 'HTTP_X_URLFETCH_PS2' in environ else ''
         else:
             wsgi_input = environ['wsgi.input']
-            input_data = wsgi_input.read(int(environ.get('CONTENT_LENGTH', '0')))
-            if 'rc4' in options:
-                input_data = RC4Cipher(__password__).encrypt(input_data)
+            input_data = wsgi_input.read(
+                int(environ.get('CONTENT_LENGTH', '0')))
             payload_length, = struct.unpack('!h', input_data[:2])
-            payload = inflate(input_data[2:2+payload_length])
-            body = input_data[2+payload_length:]
+            payload = inflate(input_data[2:2 + payload_length])
+            body = input_data[2 + payload_length:]
         raw_response_line, payload = payload.split('\r\n', 1)
         method, url = raw_response_line.split()[:2]
         headers = {}
@@ -148,7 +137,8 @@ def application(environ, start_response):
         raise StopIteration
 
     kwargs = {}
-    any(kwargs.__setitem__(x[len('x-urlfetch-'):].lower(), headers.pop(x)) for x in headers.keys() if x.lower().startswith('x-urlfetch-'))
+    any(kwargs.__setitem__(x[len('x-urlfetch-'):].lower(), headers.pop(x))
+        for x in headers.keys() if x.lower().startswith('x-urlfetch-'))
 
     if 'Content-Encoding' in headers and body:
         if headers['Content-Encoding'] == 'deflate':
@@ -156,7 +146,8 @@ def application(environ, start_response):
             headers['Content-Length'] = str(len(body))
             del headers['Content-Encoding']
 
-    logging.info('%s "%s %s %s" - -', environ['REMOTE_ADDR'], method, url, 'HTTP/1.1')
+    logging.info(
+        '%s "%s %s %s" - -', environ['REMOTE_ADDR'], method, url, 'HTTP/1.1')
 
     if __password__ and __password__ != kwargs.get('password', ''):
         yield format_response(403, {'Content-Type': 'text/html; charset=utf-8'}, message_html('403 Wrong password', 'Wrong password(%r)' % kwargs.get('password', ''), 'GoAgent proxy.ini password is wrong!'))
@@ -185,17 +176,20 @@ def application(environ, start_response):
     validate_certificate = bool(int(kwargs.get('validate', 0)))
     maxsize = int(kwargs.get('maxsize', 0))
     # https://www.freebsdchina.org/forum/viewtopic.php?t=54269
-    accept_encoding = headers.get('Accept-Encoding', '') or headers.get('Bccept-Encoding', '')
+    accept_encoding = headers.get(
+        'Accept-Encoding', '') or headers.get('Bccept-Encoding', '')
     errors = []
     for i in xrange(int(kwargs.get('fetchmax', URLFETCH_MAX))):
         try:
-            response = urlfetch.fetch(url, body, fetchmethod, headers, allow_truncated=False, follow_redirects=False, deadline=timeout, validate_certificate=validate_certificate)
+            response = urlfetch.fetch(url, body, fetchmethod, headers, allow_truncated=False,
+                                      follow_redirects=False, deadline=timeout, validate_certificate=validate_certificate)
             break
         except apiproxy_errors.OverQuotaError as e:
             time.sleep(5)
         except urlfetch.DeadlineExceededError as e:
             errors.append('%r, timeout=%s' % (e, timeout))
-            logging.error('DeadlineExceededError(timeout=%s, url=%r)', timeout, url)
+            logging.error(
+                'DeadlineExceededError(timeout=%s, url=%r)', timeout, url)
             time.sleep(1)
             timeout *= 2
         except urlfetch.DownloadError as e:
@@ -206,15 +200,18 @@ def application(environ, start_response):
         except urlfetch.ResponseTooLargeError as e:
             errors.append('%r, timeout=%s' % (e, timeout))
             response = e.response
-            logging.error('ResponseTooLargeError(timeout=%s, url=%r) response(%r)', timeout, url, response)
-            m = re.search(r'=\s*(\d+)-', headers.get('Range') or headers.get('range') or '')
+            logging.error(
+                'ResponseTooLargeError(timeout=%s, url=%r) response(%r)', timeout, url, response)
+            m = re.search(
+                r'=\s*(\d+)-', headers.get('Range') or headers.get('range') or '')
             if m is None:
                 headers['Range'] = 'bytes=0-%d' % (maxsize or URLFETCH_MAXSIZE)
             else:
                 headers.pop('Range', '')
                 headers.pop('range', '')
                 start = int(m.group(1))
-                headers['Range'] = 'bytes=%s-%d' % (start, start+(maxsize or URLFETCH_MAXSIZE))
+                headers[
+                    'Range'] = 'bytes=%s-%d' % (start, start + (maxsize or URLFETCH_MAXSIZE))
             timeout *= 2
         except urlfetch.SSLCertificateError as e:
             errors.append('%r, should validate=0 ?' % e)
@@ -226,7 +223,8 @@ def application(environ, start_response):
     else:
         error_string = '<br />\n'.join(errors)
         if not error_string:
-            logurl = 'https://appengine.google.com/logs?&app_id=%s' % os.environ['APPLICATION_ID']
+            logurl = 'https://appengine.google.com/logs?&app_id=%s' % os.environ[
+                'APPLICATION_ID']
             error_string = 'Internal Server Error. <p/>try <a href="javascript:window.location.reload(true);">refresh</a> or goto <a href="%s" target="_blank">appengine.google.com</a> for details' % logurl
         yield format_response(502, {'Content-Type': 'text/html; charset=utf-8'}, message_html('502 Urlfetch Error', 'Python Urlfetch Error: %r' % method, error_string))
         raise StopIteration
@@ -239,26 +237,29 @@ def application(environ, start_response):
     content_type = response_headers.get('content-type', '')
     if status_code == 200 and maxsize and len(data) > maxsize and response_headers.get('accept-ranges', '').lower() == 'bytes' and int(response_headers.get('content-length', 0)):
         status_code = 206
-        response_headers['Content-Range'] = 'bytes 0-%d/%d' % (maxsize-1, len(data))
+        response_headers[
+            'Content-Range'] = 'bytes 0-%d/%d' % (maxsize - 1, len(data))
         data = data[:maxsize]
     if status_code == 200 and 'content-encoding' not in response_headers and 512 < len(data) < URLFETCH_DEFLATE_MAXSIZE and content_type.startswith(('text/', 'application/json', 'application/javascript')):
         if 'gzip' in accept_encoding:
             response_headers['Content-Encoding'] = 'gzip'
-            compressobj = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -zlib.MAX_WBITS, zlib.DEF_MEM_LEVEL, 0)
+            compressobj = zlib.compressobj(
+                zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -zlib.MAX_WBITS, zlib.DEF_MEM_LEVEL, 0)
             dataio = io.BytesIO()
             dataio.write('\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\xff')
             dataio.write(compressobj.compress(data))
             dataio.write(compressobj.flush())
-            dataio.write(struct.pack('<LL', zlib.crc32(data) & 0xFFFFFFFFL, len(data) & 0xFFFFFFFFL))
+            dataio.write(
+                struct.pack('<LL', zlib.crc32(data) & 0xFFFFFFFFL, len(data) & 0xFFFFFFFFL))
             data = dataio.getvalue()
         elif 'deflate' in accept_encoding:
             response_headers['Content-Encoding'] = 'deflate'
             data = deflate(data)
     response_headers['Content-Length'] = str(len(data))
-    if 'rc4' not in options:
         yield format_response(status_code, response_headers, '')
         yield data
-    else:
-        cipher = RC4Cipher(__password__)
-        yield cipher.encrypt(format_response(status_code, response_headers, ''))
-        yield cipher.encrypt(data)
+
+
+def process(data):
+    pass
+    # TODO: parse data to CGI compatible format
