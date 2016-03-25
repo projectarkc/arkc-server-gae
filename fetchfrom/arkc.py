@@ -3,8 +3,11 @@
 
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
+from google.appengine.ext import db
 
 from goagent import process
+
+from utils import AESCipher
 
 INITIAL_INDEX =
 SPLIT_CHAR =
@@ -17,10 +20,12 @@ def application(environ, start_response):
         raise StopIteration
 
     assert environ['REQUEST_METHOD'] == 'POST'
-
+    wsgi_input = environ['wsgi.input']
+    input_data = wsgi_input.read(int(environ.get('CONTENT_LENGTH', '0'))
     # TODO: call dataReceived
-
+    dataReceived(input_data)
     start_response('200 OK', [('Content-Type', 'text/plain')]) # TODO: to be finished
+    yield ""
 
 def dataReceived(self, sessionid, recv_data):
     """Event handler of receiving some data from client.
@@ -31,20 +36,26 @@ def dataReceived(self, sessionid, recv_data):
     # logging.debug("received %d bytes from client " % len(recv_data) +
     #          addr_to_str(self.transport.getPeer()))
 
-    recvbuffer = memcache.get(sessionid + "buffer")
+    recvbuffer = memcache.get(sessionid + ".buffer")
     if recvbuffer is None:
     	recvbuffer = ""
-    index = memcache.get(sessionid+"index")
-    if index is None:
-    	index = INITIAL_INDEX
+    
+    # index is not used
+    #index = memcache.get(sessionid+".index")
+    #if index is None:
+    #	index = INITIAL_INDEX
+    
     recvbuffer += recv_data
 
-    # TODO: Get cipher
+    cipher = getcipher(sessionid)
+    if cipher is None:
+        pass
+        # TODO: error processing
 
     # a list of encrypted data packages
     # the last item may be incomplete
     recv = recvbuffer.split(SPLIT_CHAR)
-    memcache.add(id+"buffer", recv[-1], 1800)
+    memcache.add(id+".buffer", recv[-1], 1800)
     # leave the last (may be incomplete) item intact
     for text_enc in recv[:-1]:
         text_dec = cipher.decrypt(text_enc)
@@ -54,7 +65,6 @@ def dataReceived(self, sessionid, recv_data):
         reply = client_recv(text_dec[1:], sessionid)
         taskqueue.add(payload = reply, target = "fetchback", url="/fetchback/", 
             headers = {"sessionid":sessionid})
-        
     
 
 def client_recv(recv, sessionid):
@@ -74,3 +84,27 @@ def client_recv(recv, sessionid):
         pass
     else:
         return process(data) # correct?
+
+def getcipher(sessionid):
+    password = memcache.get(sessionid + ".password")
+    iv = memcache.get(sessionid + ".iv")
+    if password is None or iv is None:
+        q = db.GqlQuery("SELECT * FROM endpoint" +
+        "WHERE sessionid = :1", sessionid)
+        for rec in q.run(limit=1):
+            password = rec.password
+            iv = rec.iv
+            memcache.add(sessionid+".password", password, 1800)
+            memcache.add(sessionid+".iv", iv, 1800)
+    try:
+        cipher = AESCipher(password, iv)
+        return cipher
+    except Exception:
+        return None
+
+class endpoint(db.Model):
+    address = ndb.StringProperty(required=True)
+    password = ndb.StringProperty(required=True, indexed=False)
+    iv  = ndb.StringProperty(required=True, indexed=False)
+    sessionid = ndb.StringProperty(required=True)
+    idchar  = ndb.StringProperty(required=True)

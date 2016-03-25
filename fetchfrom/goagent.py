@@ -16,6 +16,7 @@ import urlparse
 import httplib
 import io
 import string
+import json
 
 from google.appengine.api import urlfetch
 from google.appengine.api.taskqueue.taskqueue import MAX_URL_LENGTH
@@ -236,5 +237,5 @@ def application(headers, body, method, url):
 
 
 def process(data):
-    pass
-    # TODO: parse data to CGI compatible format
+    p = json.loads(data)
+    return application(p["headers"], p["body"], p["method"], p["url"])
