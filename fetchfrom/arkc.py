@@ -2,6 +2,7 @@
 # coding:utf-8
 
 from google.appengine.api import memcache
+from google.appengine.api import taskqueue
 
 from goagent import process
 
@@ -43,16 +44,18 @@ def dataReceived(self, sessionid, recv_data):
     # a list of encrypted data packages
     # the last item may be incomplete
     recv = recvbuffer.split(SPLIT_CHAR)
+    memcache.add(id+"buffer", recv[-1], 1800)
     # leave the last (may be incomplete) item intact
     for text_enc in recv[:-1]:
         text_dec = cipher.decrypt(text_enc)
         # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
         flag = int(text_dec[0])
         if flag == 0:
-        client_recv(text_dec[1:], sessionid)
-
+        reply = client_recv(text_dec[1:], sessionid)
+        taskqueue.add(payload = reply, target = "fetchback", url="/fetchback/", 
+            headers = {"sessionid":sessionid})
         
-    memcache.add(id+"buffer", recv[-1], 1800)
+    
 
 def client_recv(recv, sessionid):
     """Handle request from client.
@@ -70,4 +73,4 @@ def client_recv(recv, sessionid):
         # retransmit, do anything?
         pass
     else:
-        yield process(data) # correct?
+        return process(data) # correct?

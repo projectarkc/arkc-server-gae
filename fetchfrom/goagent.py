@@ -109,32 +109,7 @@ def format_response(status, headers, content):
     return struct.pack('!h', len(data)) + data
 
 
-def application(environ, start_response):
-
-    start_response('200 OK', [('Content-Type', 'image/gif')])
-
-    try:
-        if 'HTTP_X_URLFETCH_PS1' in environ:
-            payload = inflate(base64.b64decode(environ['HTTP_X_URLFETCH_PS1']))
-            body = inflate(base64.b64decode(
-                environ['HTTP_X_URLFETCH_PS2'])) if 'HTTP_X_URLFETCH_PS2' in environ else ''
-        else:
-            wsgi_input = environ['wsgi.input']
-            input_data = wsgi_input.read(
-                int(environ.get('CONTENT_LENGTH', '0')))
-            payload_length, = struct.unpack('!h', input_data[:2])
-            payload = inflate(input_data[2:2 + payload_length])
-            body = input_data[2 + payload_length:]
-        raw_response_line, payload = payload.split('\r\n', 1)
-        method, url = raw_response_line.split()[:2]
-        headers = {}
-        for line in payload.splitlines():
-            key, value = line.split(':', 1)
-            headers[key.title()] = value.strip()
-    except (zlib.error, KeyError, ValueError):
-        import traceback
-        yield format_response(500, {'Content-Type': 'text/html; charset=utf-8'}, message_html('500 Internal Server Error', 'Bad Request (payload) - Possible Wrong Password', '<pre>%s</pre>' % traceback.format_exc()))
-        raise StopIteration
+def application(headers, body, method, url):
 
     kwargs = {}
     any(kwargs.__setitem__(x[len('x-urlfetch-'):].lower(), headers.pop(x))
@@ -146,8 +121,8 @@ def application(environ, start_response):
             headers['Content-Length'] = str(len(body))
             del headers['Content-Encoding']
 
-    logging.info(
-        '%s "%s %s %s" - -', environ['REMOTE_ADDR'], method, url, 'HTTP/1.1')
+    #logging.info(
+    #    '%s "%s %s %s" - -', environ['REMOTE_ADDR'], method, url, 'HTTP/1.1')
 
     if __password__ and __password__ != kwargs.get('password', ''):
         yield format_response(403, {'Content-Type': 'text/html; charset=utf-8'}, message_html('403 Wrong password', 'Wrong password(%r)' % kwargs.get('password', ''), 'GoAgent proxy.ini password is wrong!'))
