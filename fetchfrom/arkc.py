@@ -40,10 +40,7 @@ def dataReceived(self, sessionid, recv_data):
     if recvbuffer is None:
     	recvbuffer = ""
     
-    # index is not used
-    #index = memcache.get(sessionid+".index")
-    #if index is None:
-    #	index = INITIAL_INDEX
+    
     
     recvbuffer += recv_data
 
@@ -62,9 +59,10 @@ def dataReceived(self, sessionid, recv_data):
         # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
         flag = int(text_dec[0])
         if flag == 0:
-        reply = client_recv(text_dec[1:], sessionid)
-        taskqueue.add(payload = reply, target = "fetchback", url="/fetchback/", 
-            headers = {"sessionid":sessionid})
+            reply, conn_id = client_recv(text_dec[1:], sessionid)
+            rawpayload  = '0' + conn_id + str(INITIAL_INDEX) + reply
+            taskqueue.add(payload = cipher.encrypt(rawpayload) + SPLIT_CHAR, target = "fetchback", url="/fetchback/", 
+                headers = {"sessionid":sessionid, "idchar":conn_id})
     
 
 def client_recv(recv, sessionid):
@@ -73,6 +71,10 @@ def client_recv(recv, sessionid):
     Should be decrypted by ClientConnector first.
     """
     conn_id, index, data = recv[:2], int(recv[2:8]), recv[8:]
+    #recv_index = memcache.get(conn_id+".index")
+    #if recv_index is None:
+    #   recv_index = INITIAL_INDEX
+
     # logging.debug("received %d bytes from client key " % len(data) +
     #          conn_id)
     if data == self.close_char:
@@ -83,7 +85,7 @@ def client_recv(recv, sessionid):
         # retransmit, do anything?
         pass
     else:
-        return process(data) # correct?
+        return process(data), conn_id # correct?
 
 def getcipher(sessionid):
     password = memcache.get(sessionid + ".password")

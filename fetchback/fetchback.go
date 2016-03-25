@@ -79,6 +79,10 @@ func process(task endpoint, key *datastore.Key, payload io.Reader, ctx appengine
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	context = appengine.NewContext(r)
+	body := bufio.NewReader(r.Body)
+	sessionid := r.Header.Get("sessionid")
+
+	//load from index, multi at the same time?
 
 	// TODO get destination as endpoint, body as io.Reader, key as datastore.Key
 		
