@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"bytes"
 
+	"crypto/cipher"
 	"crypto/rsa"
 	"crypto/rand"
     "crypto/x509"
@@ -29,7 +30,7 @@ const (
 	urlFetchTimeout = 20 * time.Second
 )
 
-var serverpri rsa.PrivateKey
+var serverpri *rsa.PrivateKey
 var ready = false
 
 type endpoint struct {
@@ -101,27 +102,28 @@ func processRequest(forward string, payload io.Reader, sessionid string) (*http.
 	return c, nil
 }
 
-func loadserverkey(ctx appengine.Context) {
+func loadserverkey(ctx appengine.Context) error {
 	//load key from datastore or memcache
+	var block *pem.Block
 	if item, err := memcache.Get(ctx, "serverpri"); err != memcache.ErrCacheMiss {
-        block, _ := pem.Decode(item.Value)
+        block, _ = pem.Decode(item.Value)
 	} else {
 		var record []server
 		q := datastore.NewQuery("server").Limit(1)
 		_, err = q.GetAll(ctx, &record)
-		if (err != nil or len(record) == 0) {
+		if err != nil || len(record) == 0 {
 			ctx.Errorf("server key missing: %s", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return err
 		}
-		block, _ := pem.Decode([]byte(record[0].private))
-		item := &memcache.Item{
-			Key:	"server"
-			Value: 	[]byte(recprd[0].private)
+		block, _ = pem.Decode([]byte(record[0].private))
+		item = &memcache.Item{
+			Key:	"server",
+			Value: 	[]byte(record[0].private),
 		}
 		_ = memcache.Add(ctx, item)
 	}
-    serverpri, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
+    serverpri, _ = x509.ParsePKCS1PrivateKey(block.Bytes)
+    return nil
 }
 
 func getpreviousindex(sha1 []byte, ctx appengine.Context) ([]byte, string, error) {
@@ -144,40 +146,43 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 
 	sha1, _, err := body.ReadLine()
 	if err == nil {
-		return "", nil, "", "", "", err
+		return "", nil, "", "", "", "", err
 	}
 	url, _, err := body.ReadLine()
 	if err == nil {
-		return "", nil, "", "", "", err
+		return "", nil, "", "", "", "", err
 	}
 	mainpw, _, err := body.ReadLine()
 	if err == nil {
-		return "", nil, "", "", "", err
+		return "", nil, "", "", "", "", err
 	}
 	previousrecord, idchar, err := getpreviousindex(sha1, ctx)
 	if err == nil {
-		return "", nil, "", "", "", err
+		return "", nil, "", "", "", "", err
 	}
 	//try to load from memcache
 	q := datastore.NewQuery("client").Limit(1).
         Filter("clientsha1 =", string(sha1[:]))
 	_, err = q.GetAll(ctx, &record)
 	if err != nil {
-		return "", nil, "", "", "", err
+		return "", nil, "", "", "", "", err
 	}
 	if len(record) == 0 {
-		return "", nil, "", "", "", fmt.Errorf("not found")
+		return "", nil, "", "", "", "", fmt.Errorf("not found")
 	}
 	//write to memcache
 	sessionpassword := make([]byte, 16)
 	rand.Read(sessionpassword)
 	pubkey, err := x509.ParsePKIXPublicKey([]byte(record[0].clientpub))
 	if !ready {
-		loadserverkey(ctx)
+		err = loadserverkey(ctx)
+		if err != nil {
+			return "", nil, "", "", "", "", err
+		}
 		ready = true
 	}
 
-	part1, _ := rsa.SignPKCS1v15(nil, &serverpri, 0, []byte(mainpw))
+	part1, _ := rsa.SignPKCS1v15(nil, serverpri, 0, []byte(mainpw))
 	part2, _ := rsa.EncryptPKCS1v15(nil, pubkey.(*rsa.PublicKey), sessionpassword)
 	contents := bytes.NewBuffer(part1)
 	contents.Write(part2)
@@ -193,7 +198,7 @@ func authverify(body *bufio.Reader, idchar string, authstring string, iv string)
 	if err == nil {
 		return err
 	}
-	aescipher, err = aes.NewCipher(authstring)
+	aescipher, err := aes.NewCipher([]byte(authstring))
 	if err == nil {
 		return err
 	}
@@ -209,50 +214,50 @@ func authverify(body *bufio.Reader, idchar string, authstring string, iv string)
 
 }
 
-func storestring(ctx appengine.Context url string, sessionid string, authstring string, iv string, idchar string) (*io.Reader, error) {
+func storestring(ctx appengine.Context, url string, sessionid string, authstring string, iv string, idchar string) (io.Reader, error) {
 	//use Datastore and Memcache to store the string
 	//return
 	// current status, io.Reader
 	// error
+	var items []*memcache.Item
 	record := endpoint{
-		address:	url
-		password:   authstring
-		iv:			iv
-		sessionid:  sessionid
-		idchar:     idchar
+		address:	url,
+		password:   authstring,
+		iv:			iv,
+		sessionid:  sessionid,
+		idchar:     idchar,
 	}
-	key := datastore.NewIncompleteKey(ctx, endpoint, nil)
+	key := datastore.NewIncompleteKey(ctx, "endpoint", nil)
 	_, err := datastore.Put(ctx, key, &record)
 	if err != nil {
-                http.Error(w, err.Error(), http.StatusInternalServerError)
-                return nil, err
+        return nil, err
     }
-    items := [...]*memcache.Item{
+    items = append(items,
     	&memcache.Item{
-    		Key:	sessionid + ".address"
-    		Value:	[]byte(url)
+    		Key:	sessionid + ".address",
+    		Value:	[]byte(url),
     	},
     	&memcache.Item{
-    		Key:	sessionid + ".password"
-    		Value:	[]byte(authstring)
+    		Key:	sessionid + ".password",
+    		Value:	[]byte(authstring),
     	},
     	&memcache.Item{
-    		Key:	sessionid + ".iv"
-    		Value:	[]byte(iv)
+    		Key:	sessionid + ".iv",
+    		Value:	[]byte(iv),
     	},
     	&memcache.Item{
-    		Key:	sessionid + ".idchar"
-    		Value:	[]byte(idchar)
-    	}
-    }
-    _ := memcache.AddMulti(ctx, items)
+    		Key:	sessionid + ".idchar",
+    		Value:	[]byte(idchar),
+    	},
+    )
+    _ = memcache.AddMulti(ctx, items)
     // TODO get status
     return bytes.NewBuffer([]byte("")), nil
 
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	context = appengine.NewContext(r)
+	context := appengine.NewContext(r)
 	forward, payload, clientid, passwd, iv, idchar, err := getauthstring(bufio.NewReader(r.Body), context)
 	if err != nil {
 		context.Errorf("parseRequest: %s", err)
@@ -288,7 +293,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	reply ,err := storestring(ctx, forward, clientid, passwd, iv, idchar)
+	reply ,err := storestring(context, forward, clientid, passwd, iv, idchar)
 	if err != nil {
 		context.Errorf("Saving: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -296,7 +301,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Add("X-Session-Id", sessionid)
 	w.WriteHeader(resp.StatusCode)
-	n, err := io.Copy(w, &reply)
+	n, err := io.Copy(w, reply)
 	if err != nil {
 		context.Errorf("io.Copy after %d bytes: %s", n, err)
 	}
