@@ -6,9 +6,10 @@ import (
 	"io"
 	"net/http"
 	"time"
-	"bufio"
+	//"bufio"
 	//"log"
 	"bytes"
+	//"fmt"
 
 	"appengine"
 	"appengine/urlfetch"
@@ -51,27 +52,27 @@ func roundTripTry(addr endpoint, key *datastore.Key, transport urlfetch.Transpor
 			return err
 		} 
 	}
-	var buf := new(bytes.Buffer)
+	buf := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
 	t := taskqueue.NewPOSTTask("/fetchfrom/", 
 				map[string][]string{"sessionid": {addr.sessionid},
 									"contents": {buf.String()}})
-    _, err := taskqueue.Add(ctx, t, "fetchfrom1")
+    _, err = taskqueue.Add(ctx, t, "fetchfrom1")
     return err
 }
 
-func getstatus() ([]endpoint, *[]datastore.Key) {
+func getstatus(ctx appengine.Context) ([]endpoint, []*datastore.Key) {
 	//return a list of endpoints to connect, after checking if it had been checked in the interval
 	var records []endpoint
 	q := datastore.NewQuery("endpoint")
-	keys, err = q.GetAll(ctx, &records)
+	keys, err := q.GetAll(ctx, &records)
 	if err != nil {
-		return "", nil, "", "", "", err
+		return nil, nil
 	}
 	return records, keys
 }
 
-func processendpoints(tasks []endpoint, keys *[]datastore.Key, ctx appengine.Context) io.Reader {
+func processendpoints(tasks []endpoint, keys []*datastore.Key, ctx appengine.Context) io.Reader {
 	tp := urlfetch.Transport{
 			Context: ctx,
 			// Despite the name, Transport.Deadline is really a timeout and
@@ -91,19 +92,20 @@ func processendpoints(tasks []endpoint, keys *[]datastore.Key, ctx appengine.Con
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	context = appengine.NewContext(r)
-	tasks, keys := getstatus()
+	context := appengine.NewContext(r)
+	tasks, keys := getstatus(context)
 
 	if len(tasks) > 0 {
+		w.WriteHeader(http.StatusOK)
 		//do the URLfetches and create tasks
-		
 		n, err := io.Copy(w, processendpoints(tasks, keys, context))
 		if err != nil {
 			context.Errorf("io.Copy after %d bytes: %s", n, err)
-		} else {
-        	w.WriteHeader(http.StatusOK)
-        	fmt.Fprintf(w, "")
 		}
+		return
+	} else {
+		http.Error(w, "Error when processing", http.StatusInternalServerError)
+		return
 	}
 }
 	
