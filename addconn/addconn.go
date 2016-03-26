@@ -129,24 +129,28 @@ func loadserverkey(ctx appengine.Context) error {
 
 func getpreviousindex(mainpw []byte, number int, ctx appengine.Context) ([]byte, string, error) {
 	var record []endpoint
-	var last int
+	
 	// use memcache as buffer
 	q := datastore.NewQuery("endpoint").Filter("iv ==", string(mainpw[:])).Order("iv").Order("idchar")
-	_, err = q.GetAll(ctx, &record)
+	_, err := q.GetAll(ctx, &record)
 	if err != nil {
-		return "", "", err
+		return nil, "", err
 	}
 	if len(record) >= number {
-		return "", "", fmt.Errorf("Already enough connections")
+		return nil, "", fmt.Errorf("Already enough connections")
 	} else {
 		// method in doubt
-		last := strconv.Atoi(record[0].idchar)
+		last, err := strconv.Atoi(record[0].idchar)
+		if err != nil {
+			return nil, "", err
+		}
 		for _, rec := range record {
-			if strconv.Atoi(rec.idchar)-last >= 2{
+			now, _ := strconv.Atoi(rec.idchar)
+			if now-last >= 2{
 				break
 			}
 		}
-		return "", strconv.Itoa(last + 1), nil
+		return []byte(""), strconv.Itoa(last + 1), nil
 	}
 
 
@@ -179,7 +183,7 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	if err == nil {
 		return "", nil, "", "", "", "", err
 	}
-	i, err := strconv.Atoi(number)
+	i, err := strconv.Atoi(string(number[:]))
 	if err != nil {
 		return "", nil, "", "", "", "", err
 	}
