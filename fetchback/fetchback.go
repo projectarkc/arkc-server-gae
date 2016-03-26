@@ -8,6 +8,7 @@ import (
 	"time"
 	"bufio"
 	//"log"
+	"fmt"
 	"bytes"
 
 	"appengine"
@@ -50,12 +51,12 @@ func roundTripTry(addr endpoint, key *datastore.Key, payload io.Reader, transpor
 			return err
 		} 
 	}
-	var buf := new(bytes.Buffer)
+	buf := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
 	t := taskqueue.NewPOSTTask("/fetchfrom/", 
 				map[string][]string{"sessionid": {addr.sessionid},
 									"contents": {buf.String()}})
-    _, err := taskqueue.Add(ctx, t, "fetchfrom1")
+    _, err = taskqueue.Add(ctx, t, "fetchfrom1")
     return err
 }
 
@@ -75,7 +76,7 @@ func process(task endpoint, key *datastore.Key, payload io.Reader, ctx appengine
 func handler(w http.ResponseWriter, r *http.Request) {
 	var records []endpoint
 
-	context = appengine.NewContext(r)
+	context := appengine.NewContext(r)
 	body := bufio.NewReader(r.Body)
 
 	//try to get more data?
@@ -84,7 +85,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	q := datastore.NewQuery("endpoint").Filter("sessionid ==", sessionid)
 	keys, err := q.GetAll(context, &records)
-	if err != nil or len(keys) == 0 {
+	if err != nil || len(keys) == 0 {
 		// what to do?
 	}
 
