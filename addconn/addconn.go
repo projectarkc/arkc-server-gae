@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"fmt"
 	"bytes"
+	"strconv"
 
 	"crypto/cipher"
 	"crypto/rsa"
@@ -36,7 +37,7 @@ var ready = false
 type endpoint struct {
 	address    string
 	password   string
-	iv         string
+	iv         string // iv is also mainpassword
 	sessionid  string
 	idchar     string
 }
@@ -113,7 +114,7 @@ func loadserverkey(ctx appengine.Context) error {
 		_, err = q.GetAll(ctx, &record)
 		if err != nil || len(record) == 0 {
 			ctx.Errorf("server key missing: %s", err)
-			return err
+			return fmt.Errorf("Error when searching for server keys")
 		}
 		block, _ = pem.Decode([]byte(record[0].private))
 		item = &memcache.Item{
@@ -126,11 +127,29 @@ func loadserverkey(ctx appengine.Context) error {
     return nil
 }
 
-func getpreviousindex(sha1 []byte, ctx appengine.Context) ([]byte, string, error) {
-	//load from memcache for the index of certain connection
-	//and return:
-	// previous record, []byte
-	// self.i 10 ~ 99
+func getpreviousindex(mainpw []byte, number int, ctx appengine.Context) ([]byte, string, error) {
+	var record []endpoint
+	var last int
+	// use memcache as buffer
+	q := datastore.NewQuery("endpoint").Filter("iv ==", string(mainpw[:])).Order("iv").Order("idchar")
+	_, err = q.GetAll(ctx, &record)
+	if err != nil {
+		return "", "", err
+	}
+	if len(record) >= number {
+		return "", "", fmt.Errorf("Already enough connections")
+	} else {
+		// method in doubt
+		last := strconv.Atoi(record[0].idchar)
+		for _, rec := range record {
+			if strconv.Atoi(rec.idchar)-last >= 2{
+				break
+			}
+		}
+		return "", strconv.Itoa(last + 1), nil
+	}
+
+
 }
 
 func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader, string, string, string, string, error) {
@@ -156,7 +175,15 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	if err == nil {
 		return "", nil, "", "", "", "", err
 	}
-	previousrecord, idchar, err := getpreviousindex(sha1, ctx)
+	number, _, err := body.ReadLine()
+	if err == nil {
+		return "", nil, "", "", "", "", err
+	}
+	i, err := strconv.Atoi(number)
+	if err != nil {
+		return "", nil, "", "", "", "", err
+	}
+	previousrecord, idchar, err := getpreviousindex(mainpw, i, ctx)
 	if err == nil {
 		return "", nil, "", "", "", "", err
 	}
