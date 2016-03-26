@@ -9,8 +9,8 @@ from goagent import process
 
 from utils import AESCipher
 
-INITIAL_INDEX =
-SPLIT_CHAR =
+INITIAL_INDEX = 100000
+SPLIT_CHAR = chr(27) + chr(28) + chr(31)
 
 
 def application(environ, start_response):
@@ -40,8 +40,6 @@ def dataReceived(self, sessionid, recv_data):
     if recvbuffer is None:
     	recvbuffer = ""
     
-    
-    
     recvbuffer += recv_data
 
     cipher = getcipher(sessionid)
@@ -52,7 +50,7 @@ def dataReceived(self, sessionid, recv_data):
     # a list of encrypted data packages
     # the last item may be incomplete
     recv = recvbuffer.split(SPLIT_CHAR)
-    memcache.add(id+".buffer", recv[-1], 1800)
+    memcache.add(sessionid+".buffer", recv[-1], 1800)
     # leave the last (may be incomplete) item intact
     for text_enc in recv[:-1]:
         text_dec = cipher.decrypt(text_enc)
@@ -88,7 +86,7 @@ def client_recv(recv, sessionid):
         return process(data), conn_id # correct?
 
 def getcipher(sessionid):
-    password = memcache.get(sessionid + ".password")
+    assword = memcache.get(sessionid + ".password")
     iv = memcache.get(sessionid + ".iv")
     if password is None or iv is None:
         q = db.GqlQuery("SELECT * FROM endpoint" +

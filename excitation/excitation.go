@@ -64,7 +64,7 @@ func getstatus() ([]endpoint, *[]datastore.Key) {
 	//return a list of endpoints to connect, after checking if it had been checked in the interval
 	var records []endpoint
 	q := datastore.NewQuery("endpoint")
-	keys, err = q.GetAll(ctx, &record)
+	keys, err = q.GetAll(ctx, &records)
 	if err != nil {
 		return "", nil, "", "", "", err
 	}
@@ -101,7 +101,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			context.Errorf("io.Copy after %d bytes: %s", n, err)
 		} else {
-			//write empty response
+        	w.WriteHeader(http.StatusOK)
+        	fmt.Fprintf(w, "")
 		}
 	}
 }

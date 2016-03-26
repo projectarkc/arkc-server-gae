@@ -1,6 +1,6 @@
 // A web app for Google App Engine that proxies HTTP requests and responses to a
 // Tor relay running meek-server.
-package excitation
+package fetchback
 
 import (
 	"io"
@@ -30,7 +30,6 @@ type endpoint struct {
 }
 
 func roundTripTry(addr endpoint, key *datastore.Key, payload io.Reader, transport urlfetch.Transport, ctx appengine.Context) error {
-	// TODO: What to send here?
 	fr, err := http.NewRequest("POST", addr.address, payload) // TODO type?
 	if err != nil {
 		ctx.Errorf("create request: %s", err)
@@ -68,29 +67,31 @@ func process(task endpoint, key *datastore.Key, payload io.Reader, ctx appengine
 			// other words it is a time.Duration, not a time.Time.
 			Deadline: urlFetchTimeout,
 	}
-	response := bytes.NewBuffer([]byte(""))
 	
 	err := roundTripTry(task, key, payload, tp, ctx)
-	if err != nil {
-		// TODO create response and add to return value
-	}
-	return response
+	return err
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
+	var records []endpoint
+
 	context = appengine.NewContext(r)
 	body := bufio.NewReader(r.Body)
+
+	//try to get more data?
+
 	sessionid := r.Header.Get("sessionid")
 
-	//load from index, multi at the same time?
+	q := datastore.NewQuery("endpoint").Filter("sessionid ==", sessionid)
+	keys, err := q.GetAll(context, &records)
+	if err != nil or len(keys) == 0 {
+		// what to do?
+	}
 
-	// TODO get destination as endpoint, body as io.Reader, key as datastore.Key
-		
-	//do the URLfetches and create tasks
-		
-	err := process(destination, key, body, context))
+	err = process(records[0], keys[0], body, context)
 	if err != nil {
-		//return 200
+		w.WriteHeader(http.StatusOK)
+        fmt.Fprintf(w, "")
 	} else {
 		//fail?, server error? or dump
 	}
