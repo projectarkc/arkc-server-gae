@@ -122,7 +122,7 @@ def application(headers, body, method, url):
             headers['Content-Length'] = str(len(body))
             del headers['Content-Encoding']
 
-    #logging.info(
+    # logging.info(
     #    '%s "%s %s %s" - -', environ['REMOTE_ADDR'], method, url, 'HTTP/1.1')
 
     if __password__ and __password__ != kwargs.get('password', ''):
@@ -232,8 +232,8 @@ def application(headers, body, method, url):
             response_headers['Content-Encoding'] = 'deflate'
             data = deflate(data)
     response_headers['Content-Length'] = str(len(data))
-        yield format_response(status_code, response_headers, '')
-        yield data
+    yield format_response(status_code, response_headers, '')
+    yield data
 
 
 def process(data):
