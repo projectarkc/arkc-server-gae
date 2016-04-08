@@ -1,10 +1,8 @@
 queue:
 - name: fetchfrom1
-# bucket_size: 100
-  rate: 1000/s
+  rate: 500/s
   target: fetchfrom
 
 - name: fetchback1
-# bucket_size: 100
-  rate: 1000/s
-  traget: fetchback
+  rate: 500/s
+  target: fetchback

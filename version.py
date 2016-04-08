@@ -3,7 +3,7 @@
 
 import time
 
-__version__"0.1.0"
+__version__="0.1.0"
 
 def application(environ, start_response):
     start_response('200 OK', [('Content-Type', 'text/plain; charset=UTF-8')])

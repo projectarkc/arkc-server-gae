@@ -22,22 +22,22 @@ const (
 	urlFetchTimeout = 20 * time.Second
 )
 
-type endpoint struct {
-	address    string
-	password   string
-	iv         string
-	sessionid  string
-	idchar     string
+type Endpoint struct {
+	Address    string
+	Password   string
+	IV         string // IV is also mainpassword
+	Sessionid  string
+	IDChar     string
 }
 
-func roundTripTry(addr endpoint, key *datastore.Key, transport urlfetch.Transport, ctx appengine.Context) error {
+func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transport, ctx appengine.Context) error {
 	// TODO: What to send here?
-	fr, err := http.NewRequest("POST", addr.address, bytes.NewReader([]byte("")))
+	fr, err := http.NewRequest("POST", addr.Address, bytes.NewReader([]byte("")))
 	if err != nil {
 		ctx.Errorf("create request: %s", err)
 		return err
 	}
-	fr.Header.Add("X-Session-Id", addr.sessionid)
+	fr.Header.Add("X-Session-Id", addr.Sessionid)
 	resp, err := transport.RoundTrip(fr)
 	if err != nil {
 		ctx.Errorf("connect: %s", err)
@@ -55,16 +55,16 @@ func roundTripTry(addr endpoint, key *datastore.Key, transport urlfetch.Transpor
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
 	t := taskqueue.NewPOSTTask("/fetchfrom/", 
-				map[string][]string{"sessionid": {addr.sessionid},
+				map[string][]string{"Sessionid": {addr.Sessionid},
 									"contents": {buf.String()}})
     _, err = taskqueue.Add(ctx, t, "fetchfrom1")
     return err
 }
 
-func getstatus(ctx appengine.Context) ([]endpoint, []*datastore.Key) {
+func getstatus(ctx appengine.Context) ([]Endpoint, []*datastore.Key) {
 	//return a list of endpoints to connect, after checking if it had been checked in the interval
-	var records []endpoint
-	q := datastore.NewQuery("endpoint")
+	var records []Endpoint
+	q := datastore.NewQuery("Endpoint")
 	keys, err := q.GetAll(ctx, &records)
 	if err != nil {
 		return nil, nil
@@ -72,7 +72,7 @@ func getstatus(ctx appengine.Context) ([]endpoint, []*datastore.Key) {
 	return records, keys
 }
 
-func processendpoints(tasks []endpoint, keys []*datastore.Key, ctx appengine.Context) io.Reader {
+func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Context) io.Reader {
 	tp := urlfetch.Transport{
 			Context: ctx,
 			// Despite the name, Transport.Deadline is really a timeout and

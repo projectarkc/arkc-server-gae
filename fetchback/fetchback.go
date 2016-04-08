@@ -22,21 +22,21 @@ const (
 	urlFetchTimeout = 20 * time.Second
 )
 
-type endpoint struct {
-	address    string
-	password   string
-	iv         string
-	sessionid  string
-	idchar     string
+type Endpoint struct {
+	Address    string
+	Password   string
+	IV         string // IV is also mainpassword
+	Sessionid  string
+	IDChar     string
 }
 
-func roundTripTry(addr endpoint, key *datastore.Key, payload io.Reader, transport urlfetch.Transport, ctx appengine.Context) error {
-	fr, err := http.NewRequest("POST", addr.address, payload) // TODO type?
+func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transport urlfetch.Transport, ctx appengine.Context) error {
+	fr, err := http.NewRequest("POST", addr.Address, payload) // TODO type?
 	if err != nil {
 		ctx.Errorf("create request: %s", err)
 		return err
 	}
-	fr.Header.Add("X-Session-Id", addr.sessionid)
+	fr.Header.Add("X-Session-Id", addr.Sessionid)
 	resp, err := transport.RoundTrip(fr)
 	if err != nil {
 		ctx.Errorf("connect: %s", err)
@@ -54,13 +54,13 @@ func roundTripTry(addr endpoint, key *datastore.Key, payload io.Reader, transpor
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
 	t := taskqueue.NewPOSTTask("/fetchfrom/", 
-				map[string][]string{"sessionid": {addr.sessionid},
+				map[string][]string{"Sessionid": {addr.Sessionid},
 									"contents": {buf.String()}})
     _, err = taskqueue.Add(ctx, t, "fetchfrom1")
     return err
 }
 
-func process(task endpoint, key *datastore.Key, payload io.Reader, ctx appengine.Context) error {
+func process(task Endpoint, key *datastore.Key, payload io.Reader, ctx appengine.Context) error {
 	tp := urlfetch.Transport{
 			Context: ctx,
 			// Despite the name, Transport.Deadline is really a timeout and
@@ -74,16 +74,16 @@ func process(task endpoint, key *datastore.Key, payload io.Reader, ctx appengine
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	var records []endpoint
+	var records []Endpoint
 
 	context := appengine.NewContext(r)
 	body := bufio.NewReader(r.Body)
 
 	//try to get more data?
 
-	sessionid := r.Header.Get("sessionid")
+	Sessionid := r.Header.Get("Sessionid")
 
-	q := datastore.NewQuery("endpoint").Filter("sessionid ==", sessionid)
+	q := datastore.NewQuery("Endpoint").Filter("Sessionid ==", Sessionid)
 	keys, err := q.GetAll(context, &records)
 	if err != nil || len(keys) == 0 {
 		// what to do?

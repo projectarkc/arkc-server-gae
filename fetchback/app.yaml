@@ -1,4 +1,4 @@
-application: arkc-reflect1
+application: arkc-gae
 module: fetchback
 version: 1
 runtime: go

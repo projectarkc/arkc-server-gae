@@ -30,7 +30,7 @@ def application(environ, start_response):
     yield ""
 
 
-def dataReceived(self, sessionid, recv_data):
+def dataReceived(self, Sessionid, recv_data):
     """Event handler of receiving some data from client.
 
     Split, decrypt and hand them back to Control.
@@ -39,13 +39,13 @@ def dataReceived(self, sessionid, recv_data):
     # logging.debug("received %d bytes from client " % len(recv_data) +
     #          addr_to_str(self.transport.getPeer()))
 
-    recvbuffer = memcache.get(sessionid + ".buffer")
+    recvbuffer = memcache.get(Sessionid + ".buffer")
     if recvbuffer is None:
         recvbuffer = ""
 
     recvbuffer += recv_data
 
-    cipher = getcipher(sessionid)
+    cipher = getcipher(Sessionid)
     if cipher is None:
         pass
         # TODO: error processing
@@ -53,20 +53,20 @@ def dataReceived(self, sessionid, recv_data):
     # a list of encrypted data packages
     # the last item may be incomplete
     recv = recvbuffer.split(SPLIT_CHAR)
-    memcache.add(sessionid + ".buffer", recv[-1], 1800)
+    memcache.add(Sessionid + ".buffer", recv[-1], 1800)
     # leave the last (may be incomplete) item intact
     for text_enc in recv[:-1]:
         text_dec = cipher.decrypt(text_enc)
         # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
         flag = int(text_dec[0])
         if flag == 0:
-            reply, conn_id = client_recv(text_dec[1:], sessionid)
+            reply, conn_id = client_recv(text_dec[1:], Sessionid)
             rawpayload = '0' + conn_id + str(INITIAL_INDEX) + reply
             taskqueue.add(payload=cipher.encrypt(rawpayload) + SPLIT_CHAR, target="fetchback", url="/fetchback/",
-                          headers={"sessionid": sessionid, "idchar": conn_id})
+                          headers={"Sessionid": Sessionid, "IDChar": conn_id})
 
 
-def client_recv(recv, sessionid):
+def client_recv(recv, Sessionid):
     """Handle request from client.
 
     Should be decrypted by ClientConnector first.
@@ -89,27 +89,27 @@ def client_recv(recv, sessionid):
         return process(data), conn_id  # correct?
 
 
-def getcipher(sessionid):
-    password = memcache.get(sessionid + ".password")
-    iv = memcache.get(sessionid + ".iv")
-    if password is None or iv is None:
-        q = db.GqlQuery("SELECT * FROM endpoint" +
-                        "WHERE sessionid = :1", sessionid)
+def getcipher(Sessionid):
+    Password = memcache.get(Sessionid + ".Password")
+    IV = memcache.get(Sessionid + ".IV")
+    if Password is None or IV is None:
+        q = db.GqlQuery("SELECT * FROM Endpoint" +
+                        "WHERE Sessionid = :1", Sessionid)
         for rec in q.run(limit=1):
-            password = rec.password
-            iv = rec.iv
-            memcache.add(sessionid + ".password", password, 1800)
-            memcache.add(sessionid + ".iv", iv, 1800)
+            Password = rec.Password
+            IV = rec.IV
+            memcache.add(Sessionid + ".Password", Password, 1800)
+            memcache.add(Sessionid + ".IV", IV, 1800)
     try:
-        cipher = AESCipher(password, iv)
+        cipher = AESCipher(Password, IV)
         return cipher
     except Exception:
         return None
 
 
-class endpoint(db.Model):
-    address = db.StringProperty(required=True)
-    password = db.StringProperty(required=True, indexed=False)
-    iv = db.StringProperty(required=True, indexed=False)
-    sessionid = db.StringProperty(required=True)
-    idchar = db.StringProperty(required=True)
+class Endpoint(db.Model):
+    Address = db.StringProperty(required=True)
+    Password = db.StringProperty(required=True, indexed=False)
+    IV = db.StringProperty(required=True, indexed=False)
+    Sessionid = db.StringProperty(required=True)
+    IDChar = db.StringProperty(required=True)
