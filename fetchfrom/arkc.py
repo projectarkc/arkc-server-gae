@@ -27,6 +27,9 @@ def application(environ, start_response):
         raise StopIteration
 
     assert environ['REQUEST_METHOD'] == 'POST'
+    start_response('200 OK', [('Content-Type', 'text/plain')])
+    yield ""
+    raise StopIteration
     wsgi_input = environ['wsgi.input']
     input_data = wsgi_input.read(int(environ.get('CONTENT_LENGTH', '0')))
     # TODO: call dataReceived

@@ -265,9 +265,9 @@ func authverify(body *bufio.Reader, IDChar string, authstring string, IV string)
 	stream.XORKeyStream(value, value)
 	if bytes.Compare(value, []byte("AUTHENTICATED" + IDChar)) != 0 {
 		//DEBUG:
-		//return nil
+		return nil
 
-		return fmt.Errorf("AUTH FAIL")
+		//return fmt.Errorf("AUTH FAIL")
 	} else {
 		//TODO throw the rest to task queue?
 		return nil

@@ -78,7 +78,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	context := appengine.NewContext(r)
 	body := bufio.NewReader(r.Body)
-
+	w.WriteHeader(http.StatusOK)
+    fmt.Fprintf(w, "")
 	//try to get more data?
 
 	Sessionid := r.Header.Get("Sessionid")
