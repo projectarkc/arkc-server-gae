@@ -9,10 +9,11 @@ import webapp2
 
 Form_FOOTER_TEMPLATE = """\
     <form action="/clientregister" method="post">
-      This form creates adds client records.<br>
+      This form adds client records.<br>
       <br>
       Client private SHA1:  <input type="text" name="clientprisha1"><br>
-      Client public key  <input type="text" name="clientpub"><br>
+      Client public key:<br>
+      <textarea cols="60" rows="20" name="clientpub"></textarea>
       <div><input type="submit" value="Register for ArkC"></div>
     </form>
     <hr>
