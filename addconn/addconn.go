@@ -233,16 +233,15 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 		ready = true
 	}
 	
-	part1, err := rsa.SignPKCS1v15(nil, serverpri, 0, []byte(mainpw))
+	part1, err := rsa.SignPKCS1v15(rand.Reader, serverpri, 0, []byte(mainpw))
 	if err != nil {
 		return "", nil, "", "", "", "", err
 	}
-	ctx.Errorf("%s", part1)
-	part2, err := rsa.EncryptPKCS1v15(nil, rsaPub, sessionpassword)
+	part2, err := rsa.EncryptPKCS1v15(rand.Reader, rsaPub, sessionpassword)
 	if err != nil {
 		return "", nil, "", "", "", "", err
 	}
-	
+
 	contents := bytes.NewBuffer(part1)
 	contents.Write(part2)
 	contents.WriteString(IDChar)
@@ -318,7 +317,7 @@ func storestring(ctx appengine.Context, url string, Sessionid string, authstring
 func handler(w http.ResponseWriter, r *http.Request) {
 	context := appengine.NewContext(r)
 	forward, payload, clientid, passwd, IV, IDChar, err := getauthstring(bufio.NewReader(r.Body), context)
-	context.Errorf("%s, %s, %s, %s, %s, %s", forward, payload, clientid, passwd, IV, IDChar)
+	//context.Errorf("%s, %s, %s, %s, %s, %s", forward, payload, clientid, passwd, IV, IDChar)
 	if err != nil {
 		context.Errorf("parseRequest: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
