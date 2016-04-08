@@ -16,20 +16,17 @@ Form_FOOTER_TEMPLATE = """\
       <div><input type="submit" value="Register for ArkC"></div>
     </form>
     <hr>
-    <a href="/fillconfig">Create client record.</a>
+    ArkC GAE Under development version.
   </body>
 </html>
 """
 
-DEFAULT_DB_NAME = 'default_guestbook'
-
-
 class Client(ndb.Model):
     """A main model for representing an individual Guestbook entry."""
-    Clientprisha1 = ndb.StringProperty()
+    Clientprisha1 = ndb.StringProperty(indexed=False)
     #password = ndb.StringProperty(indexed = False)
     #number = ndb.StringProperty(indexed=False)
-    Clientpub = ndb.StringProperty()
+    Clientpub = ndb.StringProperty(indexed=False)
     Clientsha1 = ndb.StringProperty()
 
 
