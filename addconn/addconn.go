@@ -264,8 +264,10 @@ func authverify(body *bufio.Reader, IDChar string, authstring string, IV string)
 	stream := cipher.NewCFBDecrypter(aescipher, []byte(IV))
 	stream.XORKeyStream(value, value)
 	if bytes.Compare(value, []byte("AUTHENTICATED" + IDChar)) != 0 {
-		return nil
-		//return fmt.Errorf("AUTH FAIL")
+		//DEBUG:
+		//return nil
+
+		return fmt.Errorf("AUTH FAIL")
 	} else {
 		//TODO throw the rest to task queue?
 		return nil
