@@ -211,7 +211,20 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	//write to memcache
 	sessionpassword := make([]byte, 16)
 	rand.Read(sessionpassword)
-	pubkey, err := x509.ParsePKIXPublicKey([]byte(record.Clientpub))
+	block, _ := pem.Decode([]byte(record.Clientpub))
+	if block == nil {
+		return "", nil, "", "", "", "", fmt.Errorf("BAD key")
+	}
+	pubkey, err := x509.ParsePKIXPublicKey(block.Bytes)
+
+	if err != nil {
+		return "", nil, "", "", "", "", err
+	}
+	rsaPub, ok := pubkey.(*rsa.PublicKey)
+	if !ok||rsaPub == nil {
+		return "", nil, "", "", "", "", fmt.Errorf("BAD key")
+	}
+
 	if !ready {
 		err = loadserverkey(ctx)
 		if err != nil {
@@ -219,9 +232,17 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 		}
 		ready = true
 	}
-
-	part1, _ := rsa.SignPKCS1v15(nil, serverpri, 0, []byte(mainpw))
-	part2, _ := rsa.EncryptPKCS1v15(nil, pubkey.(*rsa.PublicKey), sessionpassword)
+	
+	part1, err := rsa.SignPKCS1v15(nil, serverpri, 0, []byte(mainpw))
+	if err != nil {
+		return "", nil, "", "", "", "", err
+	}
+	ctx.Errorf("%s", part1)
+	part2, err := rsa.EncryptPKCS1v15(nil, rsaPub, sessionpassword)
+	if err != nil {
+		return "", nil, "", "", "", "", err
+	}
+	
 	contents := bytes.NewBuffer(part1)
 	contents.Write(part2)
 	contents.WriteString(IDChar)
