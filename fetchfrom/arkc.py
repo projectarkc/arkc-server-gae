@@ -13,6 +13,12 @@ INITIAL_INDEX = 100000
 SPLIT_CHAR = chr(27) + chr(28) + chr(31)
 CLOSE_CHAR = chr(4) * 5
 
+class Endpoint(db.Model):
+    Address = db.StringProperty(required=True)
+    Password = db.BlobProperty(required=True, indexed=False)
+    IV = db.StringProperty(required=True, indexed=False)
+    Sessionid = db.StringProperty(required=True)
+    IDChar = db.StringProperty(required=True)
 
 def application(environ, start_response):
     if environ['REQUEST_METHOD'] == 'GET' and 'HTTP_X_URLFETCH_PS1' not in environ:
@@ -96,7 +102,7 @@ def getcipher(Sessionid):
         q = db.GqlQuery("SELECT * FROM Endpoint" +
                         "WHERE Sessionid = :1", Sessionid)
         for rec in q.run(limit=1):
-            Password = rec.Password
+            Password = str(rec.Password)
             IV = rec.IV
             memcache.add(Sessionid + ".Password", Password, 1800)
             memcache.add(Sessionid + ".IV", IV, 1800)
@@ -107,9 +113,4 @@ def getcipher(Sessionid):
         return None
 
 
-class Endpoint(db.Model):
-    Address = db.StringProperty(required=True)
-    Password = db.StringProperty(required=True, indexed=False)
-    IV = db.StringProperty(required=True, indexed=False)
-    Sessionid = db.StringProperty(required=True)
-    IDChar = db.StringProperty(required=True)
+

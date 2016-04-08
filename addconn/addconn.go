@@ -36,7 +36,7 @@ var ready = false
 
 type Endpoint struct {
 	Address    string
-	Password   string
+	Password   []byte
 	IV         string // IV is also mainpassword
 	Sessionid  string
 	IDChar     string
@@ -264,7 +264,8 @@ func authverify(body *bufio.Reader, IDChar string, authstring string, IV string)
 	stream := cipher.NewCFBDecrypter(aescipher, []byte(IV))
 	stream.XORKeyStream(value, value)
 	if bytes.Compare(value, []byte("AUTHENTICATED" + IDChar)) != 0 {
-		return fmt.Errorf("AUTH FAIL")
+		return nil
+		//return fmt.Errorf("AUTH FAIL")
 	} else {
 		//TODO throw the rest to task queue?
 		return nil
@@ -280,7 +281,7 @@ func storestring(ctx appengine.Context, url string, Sessionid string, authstring
 	var items []*memcache.Item
 	record := Endpoint{
 		Address:	url,
-		Password:   authstring,
+		Password:   []byte(authstring),
 		IV:			IV,
 		Sessionid:  Sessionid,
 		IDChar:     IDChar,
@@ -320,14 +321,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	//context.Errorf("%s, %s, %s, %s, %s, %s", forward, payload, clientid, passwd, IV, IDChar)
 	if err != nil {
 		context.Errorf("parseRequest: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, err.Error())
 		return
 	}
 	Sessionid := r.Header.Get("X-Session-Id")
 	fr, err := processRequest(forward, payload, Sessionid)
 	if err != nil {
 		context.Errorf("processRequest: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, err.Error())
 		return
 	}
 	// Use urlfetch.Transport directly instead of urlfetch.Client because we
@@ -342,14 +345,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	resp, err := transport.RoundTrip(fr)
 	if err != nil {
 		context.Errorf("RoundTrip: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, err.Error())
 		return
 	}
 	defer resp.Body.Close()
 	err = authverify(bufio.NewReader(resp.Body), IDChar, passwd, IV)
 	if err != nil {
 		context.Errorf("Authentication: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprintf(w, err.Error())
 		return
 	}
 	reply ,err := storestring(context, forward, clientid, passwd, IV, IDChar)
@@ -363,6 +368,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	n, err := io.Copy(w, reply)
 	if err != nil {
 		context.Errorf("io.Copy after %d bytes: %s", n, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	// TODO
 	//fetch from the server immediately

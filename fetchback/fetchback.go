@@ -24,7 +24,7 @@ const (
 
 type Endpoint struct {
 	Address    string
-	Password   string
+	Password   []byte
 	IV         string // IV is also mainpassword
 	Sessionid  string
 	IDChar     string
