@@ -9,7 +9,7 @@ import (
 	//"bufio"
 	//"log"
 	"bytes"
-	//"fmt"
+	"fmt"
 
 	"appengine"
 	"appengine/urlfetch"
@@ -104,7 +104,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	} else {
-		http.Error(w, "Error when processing", http.StatusInternalServerError)
+		//http.Error(w, "Error when processing", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Nothing to process")
 		return
 	}
 }
