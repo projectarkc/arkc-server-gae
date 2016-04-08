@@ -119,7 +119,7 @@ func loadserverkey(ctx appengine.Context) error {
 		}
 		block, _ = pem.Decode([]byte(record[0].Private))
 		item = &memcache.Item{
-			Key:	"Server",
+			Key:	"serverpri",
 			Value: 	[]byte(record[0].Private),
 		}
 		_ = memcache.Add(ctx, item)
