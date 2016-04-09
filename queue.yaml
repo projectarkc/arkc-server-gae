@@ -8,7 +8,7 @@ queue:
   target: fetchback
 
 - name: excitation
-  rate: 100/min
+  rate: 100/m
   target: excitation
   max_concurrent_requests: 1
   retry_parameters:

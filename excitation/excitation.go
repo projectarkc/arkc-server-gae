@@ -113,7 +113,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		count, _= memcache.Increment(context, "excite.count", 1, 0)
 	}
 	if count < 1000 {
-		t := taskqueue.NewPOSTTask("/excitation/", nil)
+		t := taskqueue.NewPOSTTask("/excite/", nil)
     	if _, err := taskqueue.Add(context, t, "excitation"); err != nil {
         	http.Error(w, err.Error(), http.StatusInternalServerError)
     	}
