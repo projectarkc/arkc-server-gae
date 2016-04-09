@@ -15,6 +15,7 @@ import (
 	"appengine/urlfetch"
 	"appengine/taskqueue"
 	"appengine/datastore"
+	"appengine/memcache"
 )
 
 const (
@@ -85,6 +86,7 @@ func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Con
 		err := roundTripTry(clientaddr, keys[i], tp, ctx)
 		if err != nil {
 			// TODO create response and add to return value
+			// tell whether things are successful or not
 		}
 		
 	}
@@ -94,21 +96,32 @@ func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Con
 func handler(w http.ResponseWriter, r *http.Request) {
 	context := appengine.NewContext(r)
 	tasks, keys := getstatus(context)
-
+	var count uint64
 	if len(tasks) > 0 {
 		w.WriteHeader(http.StatusOK)
 		//do the URLfetches and create tasks
 		n, err := io.Copy(w, processendpoints(tasks, keys, context))
+		fmt.Fprintf(w, "%d endpoints processed.", len(tasks))
 		if err != nil {
 			context.Errorf("io.Copy after %d bytes: %s", n, err)
 		}
-		return
+		count = 0
 	} else {
 		//http.Error(w, "Error when processing", http.StatusInternalServerError)
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "Nothing to process")
-		return
+		count, _= memcache.Increment(context, "excite.count", 1, 0)
 	}
+	if count < 1000 {
+		t := taskqueue.NewPOSTTask("/excitation/", nil)
+    	if _, err := taskqueue.Add(context, t, "excitation"); err != nil {
+        	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	}
+	} else {
+		memcache.Delete(context, "excite.count")
+	}
+
+    return
 }
 	
 

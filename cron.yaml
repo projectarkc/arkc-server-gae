@@ -1,4 +1,4 @@
 cron:
-- description: fetch frequently
-  url: /excitation/
-  schedule: every 1 mins
+#- description: fetch frequently
+#  url: /excite/
+#  schedule: every 1 mins
