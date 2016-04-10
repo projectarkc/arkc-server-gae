@@ -17,6 +17,8 @@ import (
 	"crypto/rsa"
 	"crypto/rand"
     "crypto/x509"
+    "crypto/sha256"
+    "crypto"
     "crypto/aes"
     "encoding/pem"
 
@@ -218,7 +220,7 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	pubkey, err := x509.ParsePKIXPublicKey(block.Bytes)
 
 	if err != nil {
-		return "", nil, "", "", "", "", err
+		return "", nil, "", "", "", "", fmt.Errorf("BAD key")
 	}
 	rsaPub, ok := pubkey.(*rsa.PublicKey)
 	if !ok||rsaPub == nil {
@@ -232,8 +234,8 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 		}
 		ready = true
 	}
-	
-	part1, err := rsa.SignPKCS1v15(rand.Reader, serverpri, 0, []byte(mainpw))
+	hashed := sha256.Sum256(mainpw)
+	part1, err := rsa.SignPKCS1v15(rand.Reader, serverpri, crypto.SHA256, hashed[:])
 	if err != nil {
 		return "", nil, "", "", "", "", err
 	}
@@ -243,10 +245,14 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	}
 
 	contents := bytes.NewBuffer(part1)
+	contents.WriteString("\r\n")
 	contents.Write(part2)
+	contents.WriteString("\r\n")
 	contents.WriteString(IDChar)
+	contents.WriteString("\r\n")
 	contents.Write(previousrecord)
-	// TODO: length may change? manual split string?
+	contents.WriteString("\r\n")
+	contents.Write(mainpw)
 	return string(url[:]), contents, string(sha1[:]), string(sessionpassword[:]), string(mainpw[:]), string(IDChar[:]), nil
 }
 
@@ -260,7 +266,6 @@ func authverify(body *bufio.Reader, IDChar string, authstring string, IV string)
 	if err != nil {
 		return err
 	}
-	// TODO: Blocksize???
 	stream := cipher.NewCFBDecrypter(aescipher, []byte(IV))
 	stream.XORKeyStream(value, value)
 	if bytes.Compare(value, []byte("AUTHENTICATED" + IDChar)) != 0 {
@@ -319,7 +324,7 @@ func storestring(ctx appengine.Context, url string, Sessionid string, authstring
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	context := appengine.NewContext(r)
-	forward, payload, clientid, passwd, IV, IDChar, err := getauthstring(bufio.NewReader(r.Body), context)
+	forward, payload, _, passwd, IV, IDChar, err := getauthstring(bufio.NewReader(r.Body), context)
 	//context.Errorf("%s, %s, %s, %s, %s, %s", forward, payload, clientid, passwd, IV, IDChar)
 	if err != nil {
 		context.Errorf("parseRequest: %s", err)
@@ -327,7 +332,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, err.Error())
 		return
 	}
-	Sessionid := r.Header.Get("X-Session-Id")
+	session := make([]byte, 16)
+	rand.Read(session)
+	Sessionid :=string(session[:])
 	fr, err := processRequest(forward, payload, Sessionid)
 	if err != nil {
 		context.Errorf("processRequest: %s", err)
@@ -352,6 +359,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		context.Errorf("URL Fetch error, code=%d", resp.StatusCode)
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "URL Fetch error, code=%d", resp.StatusCode)
+		return
+	}
 	err = authverify(bufio.NewReader(resp.Body), IDChar, passwd, IV)
 	if err != nil {
 		context.Errorf("Authentication: %s", err)
@@ -359,7 +372,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, err.Error())
 		return
 	}
-	reply ,err := storestring(context, forward, clientid, passwd, IV, IDChar)
+	reply ,err := storestring(context, forward, Sessionid, passwd, IV, IDChar)
 	if err != nil {
 		context.Errorf("Saving: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

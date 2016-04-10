@@ -62,7 +62,7 @@ def dataReceived(self, Sessionid, recv_data):
     # a list of encrypted data packages
     # the last item may be incomplete
     recv = recvbuffer.split(SPLIT_CHAR)
-    memcache.add(Sessionid + ".buffer", recv[-1], 1800)
+    memcache.set(Sessionid + ".buffer", recv[-1])
     # leave the last (may be incomplete) item intact
     for text_enc in recv[:-1]:
         text_dec = cipher.decrypt(text_enc)
