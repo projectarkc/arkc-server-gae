@@ -12,10 +12,15 @@ import (
 	"fmt"
 	"bytes"
 	"strconv"
+	"strings"
+	"encoding/binary"
+	"encoding/base64"
+	"math/big"
 
 	"crypto/cipher"
 	"crypto/rsa"
 	"crypto/rand"
+	mrand "math/rand"
     "crypto/x509"
     "crypto/sha256"
     "crypto"
@@ -144,19 +149,17 @@ func getpreviousindex(mainpw []byte, number int, ctx appengine.Context) ([]byte,
 	} else {
 		if len(record) != 0 {
 		// method in doubt
-			last, err := strconv.Atoi(record[0].IDChar)
-			if err != nil {
-				return nil, "", err
-			}
+			last, _ := strconv.Atoi(record[0].IDChar)
 			for _, rec := range record {
 				now, _ := strconv.Atoi(rec.IDChar)
 				if now-last >= 2{
 					break
 				}
+				last = now
 			}
 			return []byte(""), strconv.Itoa(last + 1), nil
 		} else {
-			return nil, "", nil
+			return []byte(""), "0", nil
 		}
 	}
 
@@ -213,16 +216,11 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	//write to memcache
 	sessionpassword := make([]byte, 16)
 	rand.Read(sessionpassword)
-	block, _ := pem.Decode([]byte(record.Clientpub))
-	if block == nil {
-		return "", nil, "", "", "", "", fmt.Errorf("BAD key")
-	}
-	pubkey, err := x509.ParsePKIXPublicKey(block.Bytes)
-
-	if err != nil {
-		return "", nil, "", "", "", "", fmt.Errorf("BAD key")
-	}
-	rsaPub, ok := pubkey.(*rsa.PublicKey)
+	
+	//debug
+	//sessionpassword = []byte("aaaaaaaaaaaaaaaa")
+	pub_key, err := DecodePublicKey(record.Clientpub)
+	rsaPub, ok := pub_key.(*rsa.PublicKey)
 	if !ok||rsaPub == nil {
 		return "", nil, "", "", "", "", fmt.Errorf("BAD key")
 	}
@@ -252,7 +250,7 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	contents.WriteString("\r\n")
 	contents.Write(previousrecord)
 	contents.WriteString("\r\n")
-	contents.Write(mainpw)
+	//contents.Write(mainpw)
 	return string(url[:]), contents, string(sha1[:]), string(sessionpassword[:]), string(mainpw[:]), string(IDChar[:]), nil
 }
 
@@ -268,11 +266,12 @@ func authverify(body *bufio.Reader, IDChar string, authstring string, IV string)
 	}
 	stream := cipher.NewCFBDecrypter(aescipher, []byte(IV))
 	stream.XORKeyStream(value, value)
-	if bytes.Compare(value, []byte("AUTHENTICATED" + IDChar)) != 0 {
-		//DEBUG:
+	if bytes.Compare(value, []byte("2AUTHENTICATED" + IDChar)) != 0 {
+		//DEBUG: (don't get pass here)
 		return nil
-
-		//return fmt.Errorf("AUTH FAIL")
+		//fmt.Printf("%s", authstring)
+		//fmt.Printf("%s", IV)
+		//return fmt.Errorf("AUTH FAIL %s \n%s\n%s\n", string(value[:]), authstring, IV)
 	} else {
 		//TODO throw the rest to task queue?
 		return nil
@@ -296,7 +295,7 @@ func storestring(ctx appengine.Context, url string, Sessionid string, authstring
 	key := datastore.NewIncompleteKey(ctx, "Endpoint", nil)
 	_, err := datastore.Put(ctx, key, &record)
 	if err != nil {
-        return nil, err
+        return nil, fmt.Errorf("%s, %s, %s, %s", url, IV, Sessionid, IDChar)//err
     }
     items = append(items,
     	&memcache.Item{
@@ -322,6 +321,16 @@ func storestring(ctx appengine.Context, url string, Sessionid string, authstring
 
 }
 
+func RandomString(strlen int) []byte {
+	mrand.Seed(time.Now().UTC().UnixNano())
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	result := make([]byte, strlen)
+	for i := 0; i < strlen; i++ {
+		result[i] = chars[mrand.Intn(len(chars))]
+	}
+	return result
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
 	context := appengine.NewContext(r)
 	forward, payload, _, passwd, IV, IDChar, err := getauthstring(bufio.NewReader(r.Body), context)
@@ -332,9 +341,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, err.Error())
 		return
 	}
-	session := make([]byte, 16)
-	rand.Read(session)
-	Sessionid :=string(session[:])
+	Sessionid := string(RandomString(16)[:])
 	fr, err := processRequest(forward, payload, Sessionid)
 	if err != nil {
 		context.Errorf("processRequest: %s", err)
@@ -392,4 +399,73 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func init() {
 	http.HandleFunc("/", handler)
+}
+
+
+/************************************************************
+Below adapted from https://github.com/ianmcmahon/encoding_ssh
+************************************************************/
+
+func readLength(data []byte) ([]byte, uint32, error) {
+	l_buf := data[0:4]
+
+	buf := bytes.NewBuffer(l_buf)
+
+	var length uint32
+
+	err := binary.Read(buf, binary.BigEndian, &length)
+	if err != nil { return nil, 0, err }
+
+	return data[4:], length, nil
+}
+
+func readBigInt(data []byte, length uint32) ([]byte, *big.Int, error) {
+	var bigint = new(big.Int)
+	bigint.SetBytes(data[0:length])
+	return data[length:], bigint, nil
+}
+
+func getRsaValues(data []byte) (format string, e *big.Int, n *big.Int, err error) {
+	data, length, err := readLength(data)
+	if err != nil { return }
+
+	format = string(data[0:length]); data = data[length:]
+
+	data, length, err = readLength(data)
+	if err != nil { return }
+
+	data, e, err = readBigInt(data, length)
+	if err != nil { return }
+
+	data, length, err = readLength(data)
+	if err != nil { return }
+
+	data, n, err = readBigInt(data, length)
+	if err != nil { return }
+
+	return
+}
+
+func DecodePublicKey(str string) (interface{}, error) {
+	// comes in as a three part string
+	// split into component parts
+
+	tokens := strings.Split(str, " ")
+
+	if len(tokens) < 2 { return nil, fmt.Errorf("Invalid key format; must contain at least two fields (keytype data [comment])") }
+
+	key_type := tokens[0]
+	data, err := base64.StdEncoding.DecodeString(tokens[1])
+	if err != nil { return nil, err }
+
+	format, e, n, err := getRsaValues(data)
+
+	if format != key_type { return nil, fmt.Errorf("Key type said %s, but encoded format said %s.  These should match!", key_type, format) }
+
+	pubKey := &rsa.PublicKey{
+		N: n,
+		E: int(e.Int64()),
+	}
+
+	return pubKey, nil
 }
