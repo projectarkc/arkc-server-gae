@@ -31,6 +31,7 @@ import (
 	"appengine/urlfetch"
 	"appengine/datastore"
 	"appengine/memcache"
+	"appengine/taskqueue"
 )
 
 const (
@@ -381,6 +382,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	t := taskqueue.NewPOSTTask("/excite/", nil)
+	_, _ = taskqueue.Add(context, t, "excitation")
 	w.Header().Add("X-Session-Id", Sessionid)
 	w.WriteHeader(resp.StatusCode)
 	n, err := io.Copy(w, reply)
@@ -389,8 +392,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// TODO
-	//fetch from the server immediately
 }
 
 func init() {

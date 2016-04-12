@@ -12,7 +12,7 @@ queue:
     task_retry_limit: 10
 
 - name: excitation
-  rate: 3/s
+  rate: 140/m
   target: excitation
   max_concurrent_requests: 1
   retry_parameters:

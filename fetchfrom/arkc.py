@@ -49,8 +49,8 @@ def application(environ, start_response):
 
     wsgi_input = environ['wsgi.input']
     input_data = wsgi_input.read(length)
-    print(input_data)
-    print(sessionid)
+    #print(input_data)
+    #print(sessionid)
 
     try:
         dataReceived(sessionid,input_data)
@@ -96,6 +96,7 @@ def dataReceived(Sessionid, recv_data):
     # leave the last (may be incomplete) item intact
     for text_enc in recv[:-1]:
         text_dec = cipher.decrypt(text_enc)
+        print(text_dec)
         # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
         flag = int(text_dec[0])
         if flag == 0:
