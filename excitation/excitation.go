@@ -31,18 +31,18 @@ type Endpoint struct {
 	IDChar     string
 }
 
-func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transport, ctx appengine.Context) error {
+func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transport, ctx appengine.Context) (io.Reader, error) {
 	// TODO: What to send here?
 	fr, err := http.NewRequest("POST", addr.Address, bytes.NewReader([]byte("")))
 	if err != nil {
 		ctx.Errorf("create request: %s", err)
-		return err
+		return nil, err
 	}
 	fr.Header.Add("X-Session-Id", addr.Sessionid)
 	resp, err := transport.RoundTrip(fr)
 	if err != nil {
 		ctx.Errorf("connect: %s", err)
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.ContentLength == 24 {
@@ -50,16 +50,22 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 		tmpbuf.ReadFrom(resp.Body)
 		if tmpbuf.String() == "@@@@CONNECTION CLOSE@@@@" {
 			err := datastore.Delete(ctx, key)
-			return err
+			return nil, err
 		} 
 	}
 	buf := new(bytes.Buffer)
+	result := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
-	t := taskqueue.NewPOSTTask("/fetchfrom/", 
+	if buf.Len() > 0 {
+		t := taskqueue.NewPOSTTask("/fetchfrom/", 
 				map[string][]string{"Sessionid": {addr.Sessionid},
 									"contents": {buf.String()}})
-    _, err = taskqueue.Add(ctx, t, "fetchfrom1")
-    return err
+    	_, err = taskqueue.Add(ctx, t, "fetchfrom1")
+    	if err!=nil {
+    		_, err = result.Read([]byte(fmt.Sprintf("Read from %d\n", buf.Len())))
+    	}
+    }
+    return result, err
 }
 
 func getstatus(ctx appengine.Context) ([]Endpoint, []*datastore.Key) {
@@ -83,12 +89,10 @@ func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Con
 		}
 	response := bytes.NewBuffer([]byte(""))
 	for i, clientaddr := range tasks {
-		err := roundTripTry(clientaddr, keys[i], tp, ctx)
+		result, err := roundTripTry(clientaddr, keys[i], tp, ctx)
 		if err != nil {
-			// TODO create response and add to return value
-			// tell whether things are successful or not
+			_, _ = response.ReadFrom(result)
 		}
-		
 	}
 	return response
 }
