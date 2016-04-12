@@ -76,8 +76,9 @@ class ClientRegister(webapp2.RequestHandler):
         # rate to a single entity group should be limited to
         # ~1/second.
         userrecord = Client(parent=ndb.Key('Client', "Client"))
-        userrecord.Clientprisha1 = self.request.get('clientprisha1').strip()
-        userrecord.Clientpub = self.request.get('clientpub').strip()
+        userrecord.Clientprisha1 = self.request.get('clientprisha1').strip() + '\n'
+        userrecord.Clientpub = self.request.get('clientpub').strip() + '\n'
+        print(repr(userrecord.Clientpub))
         h = hashlib.sha1()
         h.update(userrecord.Clientpub)
         userrecord.Clientsha1 = h.hexdigest()
@@ -94,8 +95,8 @@ class ServerRegister(webapp2.RequestHandler):
         # rate to a single entity group should be limited to
         # ~1/second.
         userrecord = Server(parent=ndb.Key('Server', 'Server'))
-        userrecord.Public = self.request.get('public').strip()
-        userrecord.Private = self.request.get('private').strip()
+        userrecord.Public = self.request.get('public').strip() + '\n'
+        userrecord.Private = self.request.get('private').strip() + '\n'
         if self.request.get('key').strip()==upload_key:
             memcache.set(key="serverpri", value=userrecord.Private)
             q = Server.query(ancestor=ndb.Key('Server', 'Server'))
