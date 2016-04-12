@@ -2,13 +2,17 @@ queue:
 - name: fetchfrom1
   rate: 500/s
   target: fetchfrom
+  retry_parameters:
+    task_retry_limit: 10
 
 - name: fetchback1
   rate: 500/s
   target: fetchback
+  retry_parameters:
+    task_retry_limit: 10
 
 - name: excitation
-  rate: 100/m
+  rate: 3/s
   target: excitation
   max_concurrent_requests: 1
   retry_parameters:

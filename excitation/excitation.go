@@ -58,9 +58,12 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 	buf.ReadFrom(resp.Body)
 	if buf.Len() > 0 {
 		log.Printf(buf.String())
-		t := taskqueue.NewPOSTTask("/fetchfrom/", 
-				map[string][]string{"SESSIONID": {addr.Sessionid},
-									"contents": {buf.String()}})
+		t := &taskqueue.Task {
+			Path:		"/fetchfrom/",
+			Method:		"POST",
+			Header:		map[string][]string{"SESSIONID": {addr.Sessionid}},
+			Payload:	buf.Bytes(),
+		}
     	_, err = taskqueue.Add(ctx, t, "fetchfrom1")
     	if err==nil {
     		_, err = result.Write([]byte(fmt.Sprintf("Read %d bytes.\n", buf.Len())))

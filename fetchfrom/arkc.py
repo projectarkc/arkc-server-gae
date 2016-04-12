@@ -80,7 +80,7 @@ def dataReceived(Sessionid, recv_data):
         # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
         flag = int(text_dec[0])
         if flag == 0:
-            reply, conn_id = client_recv(text_dec[1:], Sessionid)
+            reply, conn_id = client_recv(text_dec[1:])
             rawpayload = '0' + conn_id + str(INITIAL_INDEX) + reply
             taskqueue.add(payload=cipher.encrypt(rawpayload) + SPLIT_CHAR, target="fetchback", url="/fetchback/",
                           headers={"Sessionid": Sessionid, "IDChar": conn_id})
