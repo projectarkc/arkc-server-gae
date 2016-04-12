@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 	//"bufio"
-	//"log"
+	"log"
 	"bytes"
 	"fmt"
 
@@ -57,8 +57,9 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 	result := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
 	if buf.Len() > 0 {
+		log.Printf(buf.String())
 		t := taskqueue.NewPOSTTask("/fetchfrom/", 
-				map[string][]string{"Sessionid": {addr.Sessionid},
+				map[string][]string{"SESSIONID": {addr.Sessionid},
 									"contents": {buf.String()}})
     	_, err = taskqueue.Add(ctx, t, "fetchfrom1")
     	if err==nil {
@@ -101,12 +102,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	context := appengine.NewContext(r)
 	tasks, keys := getstatus(context)
 	var count uint64
+	count = 0
 	if len(tasks) > 0 {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "Processing %d connections.\n", len(tasks))
 		//do the URLfetches and create tasks
 		fmt.Fprintf(w, processendpoints(tasks, keys, context))
-		return
 	} else {
 		//http.Error(w, "Error when processing", http.StatusInternalServerError)
 		w.WriteHeader(http.StatusOK)
@@ -114,8 +115,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		count, _= memcache.Increment(context, "excite.count", 1, 0)
 	}
 	if count < 1000 {
-		t := taskqueue.NewPOSTTask("/extcite/", nil)
-    	if _, err := taskqueue.Add(context, t, "excitation"); err != nil {
+		t := taskqueue.NewPOSTTask("/excite/", nil)
+		//t.Delay = SPECIFY TIME WITH MEEK
+    	log.Printf("ADDING")
+    	_, err := taskqueue.Add(context, t, "excitation")
+    	if err != nil {
+        	log.Printf("ADD FAIL")
         	http.Error(w, err.Error(), http.StatusInternalServerError)
     	}
 	} else {

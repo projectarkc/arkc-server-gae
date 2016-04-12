@@ -3,7 +3,9 @@
 
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
-from google.appengine.ext import db
+from google.appengine.ext import ndb
+
+import logging
 
 from goagent import process
 
@@ -13,33 +15,42 @@ INITIAL_INDEX = 100000
 SPLIT_CHAR = chr(27) + chr(28) + chr(31)
 CLOSE_CHAR = chr(4) * 5
 
-class Endpoint(db.Model):
-    Address = db.StringProperty(required=True)
-    Password = db.BlobProperty(required=True, indexed=False)
-    IV = db.StringProperty(required=True, indexed=False)
-    Sessionid = db.StringProperty(required=True)
-    IDChar = db.StringProperty(required=True)
+class Endpoint(ndb.Model):
+    Address = ndb.StringProperty(required=True)
+    Password = ndb.BlobProperty(required=True, indexed=False)
+    IV = ndb.StringProperty(required=True, indexed=False)
+    Sessionid = ndb.StringProperty(required=True)
+    IDChar = ndb.StringProperty(required=True)
 
 def application(environ, start_response):
     if environ['REQUEST_METHOD'] == 'GET' and 'HTTP_X_URLFETCH_PS1' not in environ:
         start_response('200 OK', [('Content-Type', 'text/plain')])
         yield 'ArkC-GAE Python Server works'
         raise StopIteration
+    #print(environ)
+    try:
+        assert environ['REQUEST_METHOD'] == 'POST'
+        sessionid = environ['HTTP_SESSIONID']
+        length = int(environ.get('CONTENT_LENGTH', '0'))
+        assert length > 0
+    except IOError:
+        #start_response('400 Bad request', [('Content-Type', 'text/plain')])
+        start_response('200 Bad request', [('Content-Type', 'text/plain')])
+        yield "HTTP 400\nBAD REQUEST\n"
+        raise StopIteration
 
-    assert environ['REQUEST_METHOD'] == 'POST'
-    start_response('200 OK', [('Content-Type', 'text/plain')])
-    yield ""
-    raise StopIteration
     wsgi_input = environ['wsgi.input']
-    input_data = wsgi_input.read(int(environ.get('CONTENT_LENGTH', '0')))
-    # TODO: call dataReceived
-    dataReceived(input_data)
+    input_data = wsgi_input.read(length)
+    print(input_data)
+    print(sessionid)
+    dataReceived(sessionid,input_data)
+
     # TODO: to be finished
     start_response('200 OK', [('Content-Type', 'text/plain')])
     yield ""
 
 
-def dataReceived(self, Sessionid, recv_data):
+def dataReceived(Sessionid, recv_data):
     """Event handler of receiving some data from client.
 
     Split, decrypt and hand them back to Control.
@@ -75,7 +86,7 @@ def dataReceived(self, Sessionid, recv_data):
                           headers={"Sessionid": Sessionid, "IDChar": conn_id})
 
 
-def client_recv(recv, Sessionid):
+def client_recv(recv):
     """Handle request from client.
 
     Should be decrypted by ClientConnector first.
@@ -102,9 +113,9 @@ def getcipher(Sessionid):
     Password = memcache.get(Sessionid + ".Password")
     IV = memcache.get(Sessionid + ".IV")
     if Password is None or IV is None:
-        q = db.GqlQuery("SELECT * FROM Endpoint" +
-                        "WHERE Sessionid = :1", Sessionid)
-        for rec in q.run(limit=1):
+        q = Endpoint.query(Endpoint.Sessionid == Sessionid)
+        for rec in q.fetch(1):
+            #logging.warning("Found")
             Password = str(rec.Password)
             IV = rec.IV
             memcache.add(Sessionid + ".Password", Password, 1800)
@@ -113,6 +124,7 @@ def getcipher(Sessionid):
         cipher = AESCipher(Password, IV)
         return cipher
     except Exception:
+        #logging.warning("Not Found")
         return None
 
 
