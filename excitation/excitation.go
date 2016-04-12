@@ -90,12 +90,18 @@ func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Con
 			// not an absolute deadline as used in the net package. In
 			// other words it is a time.Duration, not a time.Time.
 			Deadline: urlFetchTimeout,
-		}
+	}
 	response := new(bytes.Buffer)
 	for i, clientaddr := range tasks {
 		result, err := roundTripTry(clientaddr, keys[i], tp, ctx)
 		if err == nil {
 			_, err = response.ReadFrom(result)
+		} else {
+			count, _ := memcache.Increment(ctx, clientaddr.Sessionid + ".expirecount", 1, 0)
+			if count >= 20 {
+				_ = datastore.Delete(ctx, keys[i])
+				_, _ = response.WriteString("Delete an expired endpoint.\n")
+			}
 		}
 	}
 	return response.String()
