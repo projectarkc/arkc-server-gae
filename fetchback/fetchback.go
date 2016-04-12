@@ -53,10 +53,15 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 	}
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
-	t := taskqueue.NewPOSTTask("/fetchfrom/", 
-				map[string][]string{"Sessionid": {addr.Sessionid},
-									"contents": {buf.String()}})
-    _, err = taskqueue.Add(ctx, t, "fetchfrom1")
+	if buf.Len() > 0 {
+		t := &taskqueue.Task {
+			Path:		"/fetchfrom/",
+			Method:		"POST",
+			Header:		map[string][]string{"SESSIONID": {addr.Sessionid}},
+			Payload:	buf.Bytes(),
+		}
+    	_, err = taskqueue.Add(ctx, t, "fetchfrom1")
+    }
     return err
 }
 
@@ -82,7 +87,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
     fmt.Fprintf(w, "")
 	//try to get more data?
 
-	Sessionid := r.Header.Get("Sessionid")
+	Sessionid := r.Header.Get("SESSIONID")
 
 	q := datastore.NewQuery("Endpoint").Filter("Sessionid ==", Sessionid)
 	keys, err := q.GetAll(context, &records)
