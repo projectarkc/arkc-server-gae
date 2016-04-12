@@ -61,8 +61,8 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 				map[string][]string{"Sessionid": {addr.Sessionid},
 									"contents": {buf.String()}})
     	_, err = taskqueue.Add(ctx, t, "fetchfrom1")
-    	if err!=nil {
-    		_, err = result.Read([]byte(fmt.Sprintf("Read from %d\n", buf.Len())))
+    	if err==nil {
+    		_, err = result.Write([]byte(fmt.Sprintf("Read %d bytes.\n", buf.Len())))
     	}
     }
     return result, err
@@ -79,7 +79,7 @@ func getstatus(ctx appengine.Context) ([]Endpoint, []*datastore.Key) {
 	return records, keys
 }
 
-func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Context) io.Reader {
+func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Context) string {
 	tp := urlfetch.Transport{
 			Context: ctx,
 			// Despite the name, Transport.Deadline is really a timeout and
@@ -87,14 +87,14 @@ func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Con
 			// other words it is a time.Duration, not a time.Time.
 			Deadline: urlFetchTimeout,
 		}
-	response := bytes.NewBuffer([]byte(""))
+	response := new(bytes.Buffer)
 	for i, clientaddr := range tasks {
 		result, err := roundTripTry(clientaddr, keys[i], tp, ctx)
-		if err != nil {
-			_, _ = response.ReadFrom(result)
+		if err == nil {
+			_, err = response.ReadFrom(result)
 		}
 	}
-	return response
+	return response.String()
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -103,13 +103,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var count uint64
 	if len(tasks) > 0 {
 		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Processing %d connections.\n", len(tasks))
 		//do the URLfetches and create tasks
-		n, err := io.Copy(w, processendpoints(tasks, keys, context))
-		fmt.Fprintf(w, "%d endpoints processed.", len(tasks))
-		if err != nil {
-			context.Errorf("io.Copy after %d bytes: %s", n, err)
-		}
-		count = 0
+		fmt.Fprintf(w, processendpoints(tasks, keys, context))
+		return
 	} else {
 		//http.Error(w, "Error when processing", http.StatusInternalServerError)
 		w.WriteHeader(http.StatusOK)
@@ -117,7 +114,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		count, _= memcache.Increment(context, "excite.count", 1, 0)
 	}
 	if count < 1000 {
-		t := taskqueue.NewPOSTTask("/excite/", nil)
+		t := taskqueue.NewPOSTTask("/extcite/", nil)
     	if _, err := taskqueue.Add(context, t, "excitation"); err != nil {
         	http.Error(w, err.Error(), http.StatusInternalServerError)
     	}
