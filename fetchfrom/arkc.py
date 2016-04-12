@@ -15,6 +15,14 @@ INITIAL_INDEX = 100000
 SPLIT_CHAR = chr(27) + chr(28) + chr(31)
 CLOSE_CHAR = chr(4) * 5
 
+
+class NotFoundKey(Exception):
+    pass
+
+class GAEfail(Exception):
+    pass
+
+
 class Endpoint(ndb.Model):
     Address = ndb.StringProperty(required=True)
     Password = ndb.BlobProperty(required=True, indexed=False)
@@ -33,17 +41,29 @@ def application(environ, start_response):
         sessionid = environ['HTTP_SESSIONID']
         length = int(environ.get('CONTENT_LENGTH', '0'))
         assert length > 0
-    except IOError:
+    except Exception:
         #start_response('400 Bad request', [('Content-Type', 'text/plain')])
         start_response('200 Bad request', [('Content-Type', 'text/plain')])
-        yield "HTTP 400\nBAD REQUEST\n"
+        yield "HTTP 400\nBAD REQUEST\ncannot parse\n"
         raise StopIteration
 
     wsgi_input = environ['wsgi.input']
     input_data = wsgi_input.read(length)
     print(input_data)
     print(sessionid)
-    dataReceived(sessionid,input_data)
+
+    try:
+        dataReceived(sessionid,input_data)
+    except GAEfail:
+        #start_response('400 Bad request', [('Content-Type', 'text/plain')])
+        start_response('200 Bad request', [('Content-Type', 'text/plain')])
+        yield "HTTP 400\nBAD REQUEST\ndon't work with GoAgent\n"
+        raise StopIteration
+    except NotFoundKey:
+        #start_response('400 Bad request', [('Content-Type', 'text/plain')])
+        start_response('200 Bad request', [('Content-Type', 'text/plain')])
+        yield "HTTP 400\nBAD REQUEST\nkey not found\n"
+        raise StopIteration
 
     # TODO: to be finished
     start_response('200 OK', [('Content-Type', 'text/plain')])
@@ -67,8 +87,7 @@ def dataReceived(Sessionid, recv_data):
 
     cipher = getcipher(Sessionid)
     if cipher is None:
-        pass
-        # TODO: error processing
+        raise NotFoundKey
 
     # a list of encrypted data packages
     # the last item may be incomplete
@@ -106,7 +125,10 @@ def client_recv(recv):
         # retransmit, do anything?
         pass
     else:
-        return process(data), conn_id  # correct?
+        try:
+            return process(data), conn_id  # correct?
+        except Exception:
+            raise GAEfail
 
 
 def getcipher(Sessionid):
