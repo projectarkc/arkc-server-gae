@@ -18,6 +18,9 @@ import io
 import string
 import json
 
+from BaseHTTPServer import BaseHTTPRequestHandler
+from StringIO import StringIO
+
 from google.appengine.api import urlfetch
 from google.appengine.api.taskqueue.taskqueue import MAX_URL_LENGTH
 from google.appengine.runtime import apiproxy_errors
@@ -26,6 +29,18 @@ URLFETCH_MAX = 2
 URLFETCH_MAXSIZE = 4 * 1024 * 1024
 URLFETCH_DEFLATE_MAXSIZE = 4 * 1024 * 1024
 URLFETCH_TIMEOUT = 30
+
+class HTTPRequest(BaseHTTPRequestHandler):
+    def __init__(self, request_text):
+        self.rfile = StringIO(request_text)
+        self.raw_requestline = self.rfile.readline()
+        self.error_code = self.error_message = None
+        self.parse_request()
+
+
+    def send_error(self, code, message):
+        self.error_code = code
+        self.error_message = message
 
 
 def message_html(title, banner, detail=''):
@@ -237,5 +252,6 @@ def application(headers, body, method, url):
 
 
 def process(data):
-    p = json.loads(data)
+    req = HTTPRequest(data)
+    p = json.loads(''.join(req.rfile.readlines()))
     return application(p["headers"], p["body"], p["method"], p["url"])

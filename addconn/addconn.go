@@ -371,6 +371,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 	err = authverify(bufio.NewReader(resp.Body), IDChar, passwd, IV)
 	if err != nil {
+		failResp := bytes.NewReader([]byte("@@@@CONNECTION CLOSE@@@@"))
+		frCloseconn, err := processRequest(forward, failResp, Sessionid)
+		_, _ := transport.RoundTrip(frCloseconn)
 		context.Errorf("Authentication: %s", err)
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprintf(w, err.Error())

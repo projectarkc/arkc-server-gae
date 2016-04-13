@@ -54,11 +54,11 @@ def application(environ, start_response):
 
     try:
         dataReceived(sessionid, input_data)
-    except GAEfail:
+    #except GAEfail:
         #start_response('400 Bad request', [('Content-Type', 'text/plain')])
-        start_response('200 Bad request', [('Content-Type', 'text/plain')])
-        yield "HTTP 400\nBAD REQUEST\ndon't work with GoAgent\n"
-        raise StopIteration
+    #    start_response('200 Bad request', [('Content-Type', 'text/plain')])
+    #    yield "HTTP 400\nBAD REQUEST\ndon't work with GoAgent\n"
+    #    raise StopIteration
     except NotFoundKey:
         #start_response('400 Bad request', [('Content-Type', 'text/plain')])
         start_response('200 Bad request', [('Content-Type', 'text/plain')])
@@ -115,10 +115,11 @@ def client_recv(recv):
         # retransmit, do anything?
         pass
     else:
-        try:
-            return process(data), conn_id  # correct?
-        except Exception:
-            raise GAEfail
+        return process(data), conn_id
+        #try:
+        #    return process(data), conn_id  # correct?
+        #except Exception:
+        #    raise GAEfail
 
 
 def getcipher(Sessionid):
