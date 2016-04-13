@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 	"bufio"
-	//"log"
+	"log"
 	"fmt"
 	"bytes"
 
@@ -38,6 +38,7 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 	}
 	fr.Header.Add("X-Session-Id", addr.Sessionid)
 	resp, err := transport.RoundTrip(fr)
+	log.Printf("RoundTrip")
 	if err != nil {
 		ctx.Errorf("connect: %s", err)
 		return err
@@ -79,7 +80,7 @@ func process(task Endpoint, key *datastore.Key, payload io.Reader, ctx appengine
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	var records []Endpoint
+	var record Endpoint
 
 	context := appengine.NewContext(r)
 	body := bufio.NewReader(r.Body)
@@ -89,16 +90,19 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	Sessionid := r.Header.Get("SESSIONID")
 
-	q := datastore.NewQuery("Endpoint").Filter("Sessionid ==", Sessionid)
-	keys, err := q.GetAll(context, &records)
-	if err != nil || len(keys) == 0 {
+	q := datastore.NewQuery("Endpoint").Filter("Sessionid =", Sessionid)
+	t := q.Run(context)
+	key, err := t.Next(&record)
+	if err != nil {
 		// what to do?
+		fmt.Fprintf(w, "Not found Sessionid %s", Sessionid)
+		return
 	}
 
-	err = process(records[0], keys[0], body, context)
+	err = process(record, key, body, context)
 	if err != nil {
-		w.WriteHeader(http.StatusOK)
-        fmt.Fprintf(w, "")
+		fmt.Fprintf(w, "Error when processing")
+		return
 	} else {
 		//fail?, server error? or dump
 	}
