@@ -44,10 +44,13 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 		ctx.Errorf("connect: %s", err)
 		return err
 	}
-	defer resp.Body.Close()
 	if resp.ContentLength == 24 {
 		tmpbuf := new(bytes.Buffer)
-		tmpbuf.ReadFrom(resp.Body)
+		_, err = tmpbuf.ReadFrom(resp.Body)
+		if err != nil{
+			ctx.Errorf("reading from Body: %s", err)
+			return err
+		}
 		if tmpbuf.String() == "@@@@CONNECTION CLOSE@@@@" {
 			if key == nil {
 				q := datastore.NewQuery("Endpoint").Filter("Sessionid =", addr.Sessionid).KeysOnly()
@@ -62,7 +65,11 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 		} 
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	_, err = buf.ReadFrom(resp.Body)
+	if err != nil {
+		ctx.Errorf("reading from Body: %s", err)
+		return err
+	}
 	if buf.Len() > 0 {
 		t := &taskqueue.Task {
 			Path:		"/fetchfrom/",
@@ -72,6 +79,7 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 		}
     	_, err = taskqueue.Add(ctx, t, "fetchfrom1")
     }
+    defer resp.Body.Close()
     return err
 }
 
@@ -93,8 +101,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var key *datastore.Key
 	context := appengine.NewContext(r)
 	body := bufio.NewReader(r.Body)
-	w.WriteHeader(http.StatusOK)
-    fmt.Fprintf(w, "")
+	
 	//try to get more data?
 
 	Sessionid := r.Header.Get("SESSIONID")
@@ -105,6 +112,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		key, err = t.Next(&record)
 		if err != nil {
 			// what to do?
+			w.WriteHeader(http.StatusOK)
+    		fmt.Fprintf(w, "")
 			fmt.Fprintf(w, "Not found Sessionid %s", Sessionid)
 			return
 		}
@@ -116,8 +125,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		key = nil
 	}
 	
-
+	log.Printf("PROCESS")
 	err = process(record, key, body, context)
+	w.WriteHeader(http.StatusOK)
+    fmt.Fprintf(w, "")
 	if err != nil {
 		fmt.Fprintf(w, "Error when processing")
 		return

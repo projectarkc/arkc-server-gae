@@ -89,7 +89,10 @@ def dataReceived(Sessionid, recv_data):
     flag = int(text_dec[0])
     if flag == 0:
         reply, conn_id = client_recv(text_dec[1:])
-        rawpayload = '0' + conn_id + str(INITIAL_INDEX) + reply
+        rawpayload = '0' + conn_id + str(INITIAL_INDEX)
+        for line in reply:
+            rawpayload += line
+            print(line)
         taskqueue.add(payload=cipher.encrypt(rawpayload) + SPLIT_CHAR, 
                       target="fetchback", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id})
