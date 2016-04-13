@@ -15,6 +15,7 @@ import (
 	"appengine/urlfetch"
 	"appengine/taskqueue"
 	"appengine/datastore"
+	"appengine/memcache"
 )
 
 const (
@@ -48,7 +49,15 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 		tmpbuf := new(bytes.Buffer)
 		tmpbuf.ReadFrom(resp.Body)
 		if tmpbuf.String() == "@@@@CONNECTION CLOSE@@@@" {
-			err := datastore.Delete(ctx, key)
+			if key == nil {
+				q := datastore.NewQuery("Endpoint").Filter("Sessionid =", addr.Sessionid).KeysOnly()
+				t := q.Run(ctx)
+				key, err = t.Next(addr)
+				if err != nil {
+					log.Printf("Delete error, getting key %s", err)
+				}
+			}
+			err = datastore.Delete(ctx, key)
 			return err
 		} 
 	}
@@ -81,7 +90,7 @@ func process(task Endpoint, key *datastore.Key, payload io.Reader, ctx appengine
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	var record Endpoint
-
+	var key *datastore.Key
 	context := appengine.NewContext(r)
 	body := bufio.NewReader(r.Body)
 	w.WriteHeader(http.StatusOK)
@@ -89,15 +98,24 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	//try to get more data?
 
 	Sessionid := r.Header.Get("SESSIONID")
-
-	q := datastore.NewQuery("Endpoint").Filter("Sessionid =", Sessionid)
-	t := q.Run(context)
-	key, err := t.Next(&record)
-	if err != nil {
-		// what to do?
-		fmt.Fprintf(w, "Not found Sessionid %s", Sessionid)
-		return
+	item, err := memcache.Get(context, Sessionid + ".Address")
+	if err!=memcache.ErrCacheMiss {
+		q := datastore.NewQuery("Endpoint").Filter("Sessionid =", Sessionid)
+		t := q.Run(context)
+		key, err = t.Next(&record)
+		if err != nil {
+			// what to do?
+			fmt.Fprintf(w, "Not found Sessionid %s", Sessionid)
+			return
+		}
+	} else {
+		record = Endpoint{
+			Address:	string(item.Value[:]),
+			Sessionid:	Sessionid,
+		}
+		key = nil
 	}
+	
 
 	err = process(record, key, body, context)
 	if err != nil {
