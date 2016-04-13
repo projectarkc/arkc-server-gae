@@ -53,7 +53,7 @@ def application(environ, start_response):
     #print(sessionid)
 
     try:
-        dataReceived(sessionid,input_data)
+        dataReceived(sessionid, input_data)
     except GAEfail:
         #start_response('400 Bad request', [('Content-Type', 'text/plain')])
         start_response('200 Bad request', [('Content-Type', 'text/plain')])
@@ -79,31 +79,20 @@ def dataReceived(Sessionid, recv_data):
     # logging.debug("received %d bytes from client " % len(recv_data) +
     #          addr_to_str(self.transport.getPeer()))
 
-    recvbuffer = memcache.get(Sessionid + ".buffer")
-    if recvbuffer is None:
-        recvbuffer = ""
-
-    recvbuffer += recv_data
-
     cipher = getcipher(Sessionid)
     if cipher is None:
         raise NotFoundKey
-
-    # a list of encrypted data packages
-    # the last item may be incomplete
-    recv = recvbuffer.split(SPLIT_CHAR)
-    memcache.set(Sessionid + ".buffer", recv[-1])
     # leave the last (may be incomplete) item intact
-    for text_enc in recv[:-1]:
-        text_dec = cipher.decrypt(text_enc)
-        print(text_dec)
-        # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
-        flag = int(text_dec[0])
-        if flag == 0:
-            reply, conn_id = client_recv(text_dec[1:])
-            rawpayload = '0' + conn_id + str(INITIAL_INDEX) + reply
-            taskqueue.add(payload=cipher.encrypt(rawpayload) + SPLIT_CHAR, target="fetchback", url="/fetchback/",
-                          headers={"Sessionid": Sessionid, "IDChar": conn_id})
+    text_dec = cipher.decrypt(recv_data)
+    print(text_dec)
+    # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
+    flag = int(text_dec[0])
+    if flag == 0:
+        reply, conn_id = client_recv(text_dec[1:])
+        rawpayload = '0' + conn_id + str(INITIAL_INDEX) + reply
+        taskqueue.add(payload=cipher.encrypt(rawpayload) + SPLIT_CHAR, 
+                      target="fetchback", url="/fetchback/",
+                      headers={"Sessionid": Sessionid, "IDChar": conn_id})
 
 
 def client_recv(recv):

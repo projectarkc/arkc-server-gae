@@ -21,7 +21,9 @@ import (
 const (
 	// A timeout of 0 means to use the App Engine default (5 seconds).
 	urlFetchTimeout = 20 * time.Second
+	SPLIT = "\x1b\x1c\x1f"
 )
+
 
 type Endpoint struct {
 	Address    string
@@ -57,17 +59,36 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 	result := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
 	if buf.Len() > 0 {
-		log.Printf(buf.String())
-		t := &taskqueue.Task {
-			Path:		"/fetchfrom/",
-			Method:		"POST",
-			Header:		map[string][]string{"SESSIONID": {addr.Sessionid}},
-			Payload:	buf.Bytes(),
+		var bufContents []byte
+		item, err := memcache.Get(ctx, addr.Sessionid + ".buffer")
+		if err == nil {
+			bufContents = append(item.Value[:], buf.Bytes()[:]...)
+		} else {
+			bufContents = buf.Bytes()
 		}
-    	_, err = taskqueue.Add(ctx, t, "fetchfrom1")
-    	if err==nil {
-    		_, err = result.Write([]byte(fmt.Sprintf("Read %d bytes.\n", buf.Len())))
-    	}
+		tasks := bytes.Split(bufContents, []byte(SPLIT))
+		for i, oneTask := range tasks {
+			if i < len(tasks) - 1 {
+				t := &taskqueue.Task {
+					Path:		"/fetchfrom/",
+					Method:		"POST",
+					Header:		map[string][]string{"SESSIONID": {addr.Sessionid}},
+					Payload:	oneTask,
+				}
+    			_, err = taskqueue.Add(ctx, t, "fetchfrom1")
+    			if err==nil {
+    				_, err = result.Write([]byte(fmt.Sprintf("Read %d bytes.\n", buf.Len())))
+    			}
+			} else {
+				item = &memcache.Item{
+					Key:	addr.Sessionid + ".buffer",
+					Value:	oneTask,
+				}
+				_ = memcache.Set(ctx, item)
+			}
+		}
+		//log.Printf(buf.String())
+		
     }
     return result, err
 }
