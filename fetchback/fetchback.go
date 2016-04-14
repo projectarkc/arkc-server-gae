@@ -83,7 +83,7 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 		tasks := bytes.Split(bufContents, []byte(SPLIT))
 		for i, oneTask := range tasks {
 			if i < len(tasks) - 1 {
-				if len(oneTask) <= 9 { continue }
+				if len(oneTask) == 14 { continue } // message to close conn
 				t := &taskqueue.Task {
 					Path:		"/fetchfrom/",
 					Method:		"POST",
@@ -135,6 +135,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if err!= nil {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "Lost Packet in memcache %s, %s", Sessionid, payloadHash)
+		return
 	}
 	body := bytes.NewReader(item.Value)
 	item, err = memcache.Get(context, Sessionid + ".Address")

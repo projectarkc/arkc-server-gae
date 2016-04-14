@@ -90,7 +90,7 @@ def dataReceived(Sessionid, recv_data):
         print(recv_data)
         print(len(recv_data))
         raise err
-    print(text_dec)
+    print len(text_dec.strip())
     # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
     flag = int(text_dec[0])
     if flag == 0:
@@ -103,7 +103,7 @@ def dataReceived(Sessionid, recv_data):
         h.update(cipher.encrypt(rawpayload) + SPLIT_CHAR)
         payloadHash = h.hexdigest()[16]
         memcache.add(Sessionid + '.' + payloadHash, cipher.encrypt(rawpayload) + SPLIT_CHAR, 900)
-        taskqueue.add(target="fetchback", url="/fetchback/",
+        taskqueue.add(target="fetchback1", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
                       "PAYLOADHASH":payloadHash})
 
@@ -145,11 +145,14 @@ def getcipher(Sessionid):
             IV = rec.IV
             memcache.add(Sessionid + ".Password", Password, 1800)
             memcache.add(Sessionid + ".IV", IV, 1800)
+    print("PASSWORD IS" + repr(Password))
+    print("IV IS" + repr(IV))
     try:
+        
         cipher = AESCipher(Password, IV)
         return cipher
     except Exception:
-        #logging.warning("Not Found")
+        logging.warning("Not Found")
         return None
 
 

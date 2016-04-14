@@ -1,4 +1,4 @@
-application: arkc-gae
+application: tonyyanga-arkc
 module: fetchfrom
 version: test
 runtime: python27

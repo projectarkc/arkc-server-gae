@@ -69,7 +69,8 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 		tasks := bytes.Split(bufContents, []byte(SPLIT))
 		for i, oneTask := range tasks {
 			if i < len(tasks) - 1 {
-				if len(oneTask) <= 9 { continue }
+				log.Printf("%d", len(tasks))
+				if len(oneTask) == 14 { continue } // message to close conn
 				t := &taskqueue.Task {
 					Path:		"/fetchfrom/",
 					Method:		"POST",

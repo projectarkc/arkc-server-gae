@@ -1,4 +1,4 @@
-application: arkc-gae
+application: tonyyanga-arkc
 module: default
 version: test
 runtime: python27
