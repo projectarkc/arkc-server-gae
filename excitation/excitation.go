@@ -22,6 +22,10 @@ const (
 	// A timeout of 0 means to use the App Engine default (5 seconds).
 	urlFetchTimeout = 20 * time.Second
 	SPLIT = "\x1b\x1c\x1f"
+	pollIntervalMultiplier = 1.5
+	initPollInterval = 100
+	// Maximum polling interval.
+	maxPollInterval = 5 * time.Second
 )
 
 
@@ -33,18 +37,18 @@ type Endpoint struct {
 	IDChar     string
 }
 
-func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transport, ctx appengine.Context) (io.Reader, error) {
+func roundTripTry(addr *Endpoint, key *datastore.Key, transport urlfetch.Transport, ctx appengine.Context) (io.Reader, bool, error) {
 	// TODO: What to send here?
 	fr, err := http.NewRequest("POST", addr.Address, bytes.NewReader([]byte("")))
 	if err != nil {
 		ctx.Errorf("create request: %s", err)
-		return nil, err
+		return nil, false, err
 	}
 	fr.Header.Add("X-Session-Id", addr.Sessionid)
 	resp, err := transport.RoundTrip(fr)
 	if err != nil {
 		ctx.Errorf("connect: %s", err)
-		return nil, err
+		return nil, false, err
 	}
 	defer resp.Body.Close()
 	if resp.ContentLength == 24 {
@@ -52,7 +56,8 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 		tmpbuf.ReadFrom(resp.Body)
 		if tmpbuf.String() == "@@@@CONNECTION CLOSE@@@@" {
 			err := datastore.Delete(ctx, key)
-			return nil, err
+			return nil, false, err
+			// TODO: take further action?
 		} 
 	}
 	buf := new(bytes.Buffer)
@@ -90,23 +95,26 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 			}
 		}
 		//log.Printf(buf.String())
-		
+		return result, true, err
+    } else {
+    	return result, false, err
     }
-    return result, err
+    
 }
 
-func getstatus(ctx appengine.Context) ([]Endpoint, []*datastore.Key) {
+func getstatus(ctx appengine.Context, Id string) (*Endpoint, *datastore.Key) {
 	//return a list of endpoints to connect, after checking if it had been checked in the interval
-	var records []Endpoint
-	q := datastore.NewQuery("Endpoint")
-	keys, err := q.GetAll(ctx, &records)
+	var record Endpoint
+	q := datastore.NewQuery("Endpoint").Filter("Sessionid = ", Id)
+	t := q.Run(ctx)
+	key, err := t.Next(&record)
 	if err != nil {
 		return nil, nil
 	}
-	return records, keys
+	return &record, key
 }
 
-func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Context) string {
+func processendpoints(task *Endpoint, key *datastore.Key, ctx appengine.Context) (string, bool, error) {
 	tp := urlfetch.Transport{
 			Context: ctx,
 			// Despite the name, Transport.Deadline is really a timeout and
@@ -115,50 +123,61 @@ func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Con
 			Deadline: urlFetchTimeout,
 	}
 	response := new(bytes.Buffer)
-	for i, clientaddr := range tasks {
-		result, err := roundTripTry(clientaddr, keys[i], tp, ctx)
-		if err == nil {
-			_, err = response.ReadFrom(result)
-		} else {
-			count, _ := memcache.Increment(ctx, clientaddr.Sessionid + ".expirecount", 1, 0)
-			if count >= 10 {
-				_ = datastore.Delete(ctx, keys[i])
-				_, _ = response.WriteString("Delete an expired endpoint.\n")
-			}
-		}
+	
+	result, dataRetr, err := roundTripTry(task, key, tp, ctx)
+	if err == nil {
+		_, err = response.ReadFrom(result)
+		return response.String(), dataRetr, nil
+	} else {
+		return "", false, err
 	}
-	return response.String()
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	context := appengine.NewContext(r)
-	tasks, keys := getstatus(context)
+	Sessionid := r.Header.Get("SESSIONID")
+	task, key := getstatus(context, Sessionid)
 	var count uint64
+	var delay float64
+	delay = initPollInterval
 	count = 0
-	if len(tasks) > 0 {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "Processing %d connections.\n", len(tasks))
-		//do the URLfetches and create tasks
-		fmt.Fprintf(w, processendpoints(tasks, keys, context))
-	} else {
-		//http.Error(w, "Error when processing", http.StatusInternalServerError)
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "Nothing to process")
-		count, _= memcache.Increment(context, "excite.count", 1, 0)
+	startTime := time.Now()
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "Processing connection.\n")
+	for true {
+		reply, instant, err := processendpoints(task, key, context)
+		if err != nil {
+			count += 1
+			if count >= 10 {
+				_ = datastore.Delete(context, key)
+				fmt.Fprintf(w, "Delete expired endpoint.\n")
+				return
+			}
+		}
+		fmt.Fprintf(w, reply)
+		// check timeout
+		tNow := time.Now()
+		if tNow.Sub(startTime) > 570 * time.Second {
+			break
+		}
+		// wait
+		if !instant {
+			delay = delay * pollIntervalMultiplier
+			if time.Duration(delay) * time.Millisecond < maxPollInterval {
+				time.Sleep(time.Duration(delay) * time.Millisecond)
+			} else {
+				time.Sleep(maxPollInterval)
+			}
+		} else {
+			delay = initPollInterval
+		}
 	}
-	if count < 10 {
-		t := taskqueue.NewPOSTTask("/excite/", nil)
-		//t.Delay = SPECIFY TIME WITH MEEK
-    	log.Printf("ADDING")
-    	_, err := taskqueue.Add(context, t, "excitation")
-    	if err != nil {
-        	log.Printf("ADD FAIL")
-        	http.Error(w, err.Error(), http.StatusInternalServerError)
-    	}
-	} else {
-		memcache.Delete(context, "excite.count")
-	}
-
+	t := taskqueue.NewPOSTTask("/excite/", map[string][]string{"SESSIONID": {Sessionid}})
+	_, err := taskqueue.Add(context, t, "excitation")
+    if err != nil {
+       	log.Printf("ADD FAIL")
+       	http.Error(w, err.Error(), http.StatusInternalServerError)
+    }
     return
 }
 	

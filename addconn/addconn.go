@@ -385,7 +385,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	t := taskqueue.NewPOSTTask("/excite/", nil)
+	t := taskqueue.NewPOSTTask("/excite/", map[string][]string{"SESSIONID": {Sessionid}})
 	_, _ = taskqueue.Add(context, t, "excitation")
 	w.Header().Add("X-Session-Id", Sessionid)
 	w.WriteHeader(resp.StatusCode)

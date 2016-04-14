@@ -4,6 +4,8 @@ version: test
 runtime: python27
 api_version: 1
 threadsafe: true
+#automatic-scaling:
+#  max_concurrent_requests: 100
 
 handlers:
 - url: /.*
