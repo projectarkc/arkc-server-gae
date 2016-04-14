@@ -23,6 +23,9 @@ class NotFoundKey(Exception):
 class GAEfail(Exception):
     pass
 
+class Nonsense(Exception):
+    pass
+
 
 class Endpoint(ndb.Model):
     Address = ndb.StringProperty(required=True)
@@ -65,6 +68,10 @@ def application(environ, start_response):
         start_response('200 Bad request', [('Content-Type', 'text/plain')])
         yield "HTTP 400\nBAD REQUEST\nkey not found\n"
         raise StopIteration
+    except Nonsense:
+        start_response('202 Bad request', [('Content-Type', 'text/plain')])
+        yield "HTTP 202\nBAD REQUEST\nkey not found\n"
+        raise StopIteration
 
     # TODO: to be finished
     start_response('200 OK', [('Content-Type', 'text/plain')])
@@ -90,7 +97,9 @@ def dataReceived(Sessionid, recv_data):
         print(recv_data)
         print(len(recv_data))
         raise err
-    print len(text_dec.strip())
+    if len(text_dec) == 14:
+        raise Nonsense
+
     # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
     flag = int(text_dec[0])
     if flag == 0:
@@ -98,12 +107,13 @@ def dataReceived(Sessionid, recv_data):
         rawpayload = '0' + conn_id + str(INITIAL_INDEX)
         for line in reply:
             rawpayload += line
-            print(line)
+            #print(line)
         h = hashlib.sha1()
-        h.update(cipher.encrypt(rawpayload) + SPLIT_CHAR)
+        h.update(rawpayload)
+        print(rawpayload)
         payloadHash = h.hexdigest()[16]
         memcache.add(Sessionid + '.' + payloadHash, cipher.encrypt(rawpayload) + SPLIT_CHAR, 900)
-        taskqueue.add(target="fetchback1", url="/fetchback/",
+        taskqueue.add(queue_name="fetchback1", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
                       "PAYLOADHASH":payloadHash})
 
@@ -145,8 +155,8 @@ def getcipher(Sessionid):
             IV = rec.IV
             memcache.add(Sessionid + ".Password", Password, 1800)
             memcache.add(Sessionid + ".IV", IV, 1800)
-    print("PASSWORD IS" + repr(Password))
-    print("IV IS" + repr(IV))
+    #print("PASSWORD IS" + repr(Password))
+    #print("IV IS" + repr(IV))
     try:
         
         cipher = AESCipher(Password, IV)
