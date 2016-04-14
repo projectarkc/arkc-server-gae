@@ -6,6 +6,7 @@ from google.appengine.api import taskqueue
 from google.appengine.ext import ndb
 
 import logging
+import hashlib
 
 from goagent import process
 
@@ -83,7 +84,12 @@ def dataReceived(Sessionid, recv_data):
     if cipher is None:
         raise NotFoundKey
     # leave the last (may be incomplete) item intact
-    text_dec = cipher.decrypt(recv_data)
+    try:
+        text_dec = cipher.decrypt(recv_data)
+    except Exception as err:
+        print(recv_data)
+        print(len(recv_data))
+        raise err
     print(text_dec)
     # flag is 0 for normal data packet, 1 for ping packet, 2 for auth
     flag = int(text_dec[0])
@@ -93,9 +99,13 @@ def dataReceived(Sessionid, recv_data):
         for line in reply:
             rawpayload += line
             print(line)
-        taskqueue.add(payload=cipher.encrypt(rawpayload) + SPLIT_CHAR, 
-                      target="fetchback", url="/fetchback/",
-                      headers={"Sessionid": Sessionid, "IDChar": conn_id})
+        h = hashlib.sha1()
+        h.update(cipher.encrypt(rawpayload) + SPLIT_CHAR)
+        payloadHash = h.hexdigest()[16]
+        memcache.add(Sessionid + '.' + payloadHash, cipher.encrypt(rawpayload) + SPLIT_CHAR, 900)
+        taskqueue.add(target="fetchback", url="/fetchback/",
+                      headers={"Sessionid": Sessionid, "IDChar": conn_id,
+                      "PAYLOADHASH":payloadHash})
 
 
 def client_recv(recv):
@@ -118,11 +128,10 @@ def client_recv(recv):
         # retransmit, do anything?
         pass
     else:
-        return process(data), conn_id
-        #try:
-        #    return process(data), conn_id  # correct?
-        #except Exception:
-        #    raise GAEfail
+        try:
+            return process(data), conn_id  # correct?
+        except Exception:
+            raise GAEfail
 
 
 def getcipher(Sessionid):

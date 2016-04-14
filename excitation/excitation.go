@@ -69,6 +69,7 @@ func roundTripTry(addr Endpoint, key *datastore.Key, transport urlfetch.Transpor
 		tasks := bytes.Split(bufContents, []byte(SPLIT))
 		for i, oneTask := range tasks {
 			if i < len(tasks) - 1 {
+				if len(oneTask) <= 9 { continue }
 				t := &taskqueue.Task {
 					Path:		"/fetchfrom/",
 					Method:		"POST",
@@ -119,7 +120,7 @@ func processendpoints(tasks []Endpoint, keys []*datastore.Key, ctx appengine.Con
 			_, err = response.ReadFrom(result)
 		} else {
 			count, _ := memcache.Increment(ctx, clientaddr.Sessionid + ".expirecount", 1, 0)
-			if count >= 20 {
+			if count >= 10 {
 				_ = datastore.Delete(ctx, keys[i])
 				_, _ = response.WriteString("Delete an expired endpoint.\n")
 			}
@@ -144,7 +145,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Nothing to process")
 		count, _= memcache.Increment(context, "excite.count", 1, 0)
 	}
-	if count < 1000 {
+	if count < 10 {
 		t := taskqueue.NewPOSTTask("/excite/", nil)
 		//t.Delay = SPECIFY TIME WITH MEEK
     	log.Printf("ADDING")

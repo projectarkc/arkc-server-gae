@@ -373,7 +373,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		failResp := bytes.NewReader([]byte("@@@@CONNECTION CLOSE@@@@"))
 		frCloseconn, err := processRequest(forward, failResp, Sessionid)
-		_, _ := transport.RoundTrip(frCloseconn)
+		_, _ = transport.RoundTrip(frCloseconn)
 		context.Errorf("Authentication: %s", err)
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprintf(w, err.Error())

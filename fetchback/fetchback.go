@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 	"time"
-	"bufio"
+	//"bufio"
 	"log"
 	"fmt"
 	"bytes"
@@ -21,6 +21,7 @@ import (
 const (
 	// A timeout of 0 means to use the App Engine default (5 seconds).
 	urlFetchTimeout = 20 * time.Second
+	SPLIT = "\x1b\x1c\x1f"
 )
 
 type Endpoint struct {
@@ -44,6 +45,7 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 		ctx.Errorf("connect: %s", err)
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.ContentLength == 24 {
 		tmpbuf := new(bytes.Buffer)
 		_, err = tmpbuf.ReadFrom(resp.Body)
@@ -71,15 +73,39 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
 		return err
 	}
 	if buf.Len() > 0 {
-		t := &taskqueue.Task {
-			Path:		"/fetchfrom/",
-			Method:		"POST",
-			Header:		map[string][]string{"SESSIONID": {addr.Sessionid}},
-			Payload:	buf.Bytes(),
+		var bufContents []byte
+		item, err := memcache.Get(ctx, addr.Sessionid + ".buffer")
+		if err == nil {
+			bufContents = append(item.Value[:], buf.Bytes()[:]...)
+		} else {
+			bufContents = buf.Bytes()
 		}
-    	_, err = taskqueue.Add(ctx, t, "fetchfrom1")
+		tasks := bytes.Split(bufContents, []byte(SPLIT))
+		for i, oneTask := range tasks {
+			if i < len(tasks) - 1 {
+				if len(oneTask) <= 9 { continue }
+				t := &taskqueue.Task {
+					Path:		"/fetchfrom/",
+					Method:		"POST",
+					Header:		map[string][]string{"SESSIONID": {addr.Sessionid}},
+					Payload:	oneTask,
+				}
+    			_, err = taskqueue.Add(ctx, t, "fetchfrom1")
+    			if err==nil {
+    				log.Printf("Read %d bytes.\n", buf.Len())
+    			}
+			} else {
+				item = &memcache.Item{
+					Key:	addr.Sessionid + ".buffer",
+					Value:	oneTask,
+				}
+				_ = memcache.Set(ctx, item)
+			}
+		}
+		//log.Printf(buf.String())
+		
     }
-    defer resp.Body.Close()
+    
     return err
 }
 
@@ -100,12 +126,18 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var record Endpoint
 	var key *datastore.Key
 	context := appengine.NewContext(r)
-	body := bufio.NewReader(r.Body)
 	
 	//try to get more data?
 
 	Sessionid := r.Header.Get("SESSIONID")
-	item, err := memcache.Get(context, Sessionid + ".Address")
+	payloadHash := r.Header.Get("PAYLOADHASH")
+	item, err := memcache.Get(context, Sessionid + "." + payloadHash)
+	if err!= nil {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Lost Packet in memcache %s, %s", Sessionid, payloadHash)
+	}
+	body := bytes.NewReader(item.Value)
+	item, err = memcache.Get(context, Sessionid + ".Address")
 	if err!=memcache.ErrCacheMiss {
 		q := datastore.NewQuery("Endpoint").Filter("Sessionid =", Sessionid)
 		t := q.Run(context)
