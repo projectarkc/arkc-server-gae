@@ -1,4 +1,4 @@
-application: tonyyanga-arkc
+application: arkc-gae
 module: addconn
 version: test
 runtime: go
