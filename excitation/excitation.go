@@ -110,8 +110,9 @@ func getstatus(ctx appengine.Context, Id string) (*Endpoint, *datastore.Key) {
 	key, err := t.Next(&record)
 	if err != nil {
 		return nil, nil
+	} else {
+		return &record, key
 	}
-	return &record, key
 }
 
 func processendpoints(task *Endpoint, key *datastore.Key, ctx appengine.Context) (string, bool, error) {
@@ -137,6 +138,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	context := appengine.NewContext(r)
 	Sessionid := r.Header.Get("SESSIONID")
 	task, key := getstatus(context, Sessionid)
+	if task == nil {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Non-existing connection.\n")
+		return
+	}
 	var count uint64
 	var delay float64
 	delay = initPollInterval
@@ -172,7 +178,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			delay = initPollInterval
 		}
 	}
-	t := taskqueue.NewPOSTTask("/excite/", map[string][]string{"SESSIONID": {Sessionid}})
+	t := &taskqueue.Task {
+					Path:		"/excite/",
+					Method:		"POST",
+					Header:		map[string][]string{"SESSIONID": {Sessionid}},
+	}
 	_, err := taskqueue.Add(context, t, "excitation")
     if err != nil {
        	log.Printf("ADD FAIL")
