@@ -8,6 +8,8 @@ from google.appengine.ext import ndb
 import logging
 import hashlib
 
+#from webob import Response
+
 from goagent import process, NotFoundKey, GAEfail, PermanentFail, TimeoutFail, Nonsense
 
 from utils import AESCipher
@@ -113,6 +115,7 @@ def dataReceived(Sessionid, recv_data):
             rawpayload += line
             # print(line)
         tosend = ""
+        rawpayload = wrap_response(rawpayload)
         while len(rawpayload) + len(prefix) + len(SPLIT_CHAR) > 4096:
             tosend += cipher.encrypt(
                 prefix + rawpayload[:4096 - len(prefix) - len(SPLIT_CHAR)]) + SPLIT_CHAR
@@ -128,6 +131,19 @@ def dataReceived(Sessionid, recv_data):
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
                                "PAYLOADHASH": payloadHash})
 
+def wrap_response(payload):
+    # Keep Alive?
+    return payload  + '\x00\x00\x00\x00\x00'
+    #resp = Response()
+    #resp.status = 200
+    #resp.body = payload
+    #resp.headers['Connection'] = 'close'
+    #resp.headers['Transfer-Encoding'] =  'chunked'
+    #return str(resp) + '\x00\x00\x00\x00\x00'
+
+
+
+print 
 
 def client_recv(recv):
     """Handle request from client.
