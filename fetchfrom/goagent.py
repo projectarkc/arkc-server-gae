@@ -30,28 +30,34 @@ URLFETCH_MAXSIZE = 4 * 1024 * 1024
 URLFETCH_DEFLATE_MAXSIZE = 4 * 1024 * 1024
 URLFETCH_TIMEOUT = 30
 
+
 class NotFoundKey(Exception):
     pass
+
 
 class GAEfail(Exception):
     pass
 
+
 class Nonsense(Exception):
     pass
+
 
 class PermanentFail(Exception):
     pass
 
+
 class TimeoutFail(Exception):
     pass
 
+
 class HTTPRequest(BaseHTTPRequestHandler):
+
     def __init__(self, request_text):
         self.rfile = StringIO(request_text)
         self.raw_requestline = self.rfile.readline()
         self.error_code = self.error_message = None
         self.parse_request()
-
 
     def send_error(self, code, message):
         self.error_code = code

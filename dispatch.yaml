@@ -1,7 +1,7 @@
 dispatch:
         # Activate requests from central server
         - url: "*/addconn*"
-          module: addconn
+          module: excitation 
 
         # Excitation reqeusts from central server
         - url: "*/excite*"
@@ -13,7 +13,7 @@ dispatch:
 
         # Process data back from Goagent
         - url: "*/fetchback*"
-          module: fetchback
+          module: excitation 
 
         # Process data from MEEK
         - url: "*/fetchfrom*"

@@ -24,12 +24,13 @@ class Endpoint(ndb.Model):
     Sessionid = ndb.StringProperty(required=True)
     IDChar = ndb.StringProperty(required=True)
 
+
 def application(environ, start_response):
     if environ['REQUEST_METHOD'] == 'GET' and 'HTTP_X_URLFETCH_PS1' not in environ:
         start_response('200 OK', [('Content-Type', 'text/plain')])
         yield 'ArkC-GAE Python Server works'
         raise StopIteration
-    #print(environ)
+    # print(environ)
     try:
         assert environ['REQUEST_METHOD'] == 'POST'
         sessionid = environ['HTTP_SESSIONID']
@@ -43,12 +44,12 @@ def application(environ, start_response):
 
     wsgi_input = environ['wsgi.input']
     input_data = wsgi_input.read(length)
-    #print(input_data)
-    #print(sessionid)
+    # print(input_data)
+    # print(sessionid)
 
     try:
         dataReceived(sessionid, input_data)
-    #except GAEfail:
+    # except GAEfail:
         #start_response('400 Bad request', [('Content-Type', 'text/plain')])
     #    start_response('200 Bad request', [('Content-Type', 'text/plain')])
     #    yield "HTTP 400\nBAD REQUEST\ndon't work with GoAgent\n"
@@ -110,21 +111,22 @@ def dataReceived(Sessionid, recv_data):
         rawpayload = ""
         for line in reply:
             rawpayload += line
-            #print(line)
+            # print(line)
         tosend = ""
         while len(rawpayload) + len(prefix) + len(SPLIT_CHAR) > 4096:
-            tosend += cipher.encrypt(prefix + rawpayload[:4096-len(prefix)-len(SPLIT_CHAR)]) + SPLIT_CHAR
-            rawpayload = rawpayload[4096-len(prefix)-len(SPLIT_CHAR):]
+            tosend += cipher.encrypt(
+                prefix + rawpayload[:4096 - len(prefix) - len(SPLIT_CHAR)]) + SPLIT_CHAR
+            rawpayload = rawpayload[4096 - len(prefix) - len(SPLIT_CHAR):]
         tosend += cipher.encrypt(prefix + rawpayload) + SPLIT_CHAR
         h = hashlib.sha1()
         h.update(tosend)
-        #print(tosend)
+        # print(tosend)
         logging.info("%d sent to fetchback" % len(tosend))
         payloadHash = h.hexdigest()[16]
         memcache.add(Sessionid + '.' + payloadHash, tosend, 900)
         taskqueue.add(queue_name="fetchback1", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
-                      "PAYLOADHASH":payloadHash})
+                               "PAYLOADHASH": payloadHash})
 
 
 def client_recv(recv):
@@ -156,7 +158,7 @@ def getcipher(Sessionid):
     if Password is None or IV is None:
         q = Endpoint.query(Endpoint.Sessionid == Sessionid)
         for rec in q.fetch(1):
-            #logging.warning("Found")
+            # logging.warning("Found")
             Password = str(rec.Password)
             IV = rec.IV
             memcache.add(Sessionid + ".Password", Password, 1800)
@@ -164,12 +166,9 @@ def getcipher(Sessionid):
     #print("PASSWORD IS" + repr(Password))
     #print("IV IS" + repr(IV))
     try:
-        
+
         cipher = AESCipher(Password, IV)
         return cipher
     except Exception:
         logging.warning("Not Found")
         return None
-
-
-
