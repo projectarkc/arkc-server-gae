@@ -3,35 +3,35 @@
 package addconn
 
 import (
-	"io"
-	"net/http"
-	"net"
-	"net/url"
-	"time"
 	"bufio"
-	"fmt"
 	"bytes"
+	"encoding/base64"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"math/big"
+	"net"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
-	"encoding/binary"
-	"encoding/base64"
-	"math/big"
+	"time"
 
+	"crypto"
+	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rsa"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/pem"
 	mrand "math/rand"
-    "crypto/x509"
-    "crypto/sha256"
-    "crypto"
-    "crypto/aes"
-    "encoding/pem"
 
 	"appengine"
-	"appengine/urlfetch"
 	"appengine/datastore"
 	"appengine/memcache"
 	"appengine/taskqueue"
+	"appengine/urlfetch"
 )
 
 const (
@@ -43,22 +43,22 @@ var serverpri *rsa.PrivateKey
 var ready = false
 
 type Endpoint struct {
-	Address    string
-	Password   []byte
-	IV         string // IV is also mainpassword
-	Sessionid  string
-	IDChar     string
+	Address   string
+	Password  []byte
+	IV        string // IV is also mainpassword
+	Sessionid string
+	IDChar    string
 }
 
-type Client struct {	
-	Clientprisha1   string
-	Clientpub    	string
-	Clientsha1 		string
+type Client struct {
+	Clientprisha1 string
+	Clientpub     string
+	Clientsha1    string
 }
 
 type Server struct {
-	Public	string
-	Private	string
+	Public  string
+	Private string
 }
 
 // Join two URL paths.
@@ -94,14 +94,14 @@ func getClientAddr(r *http.Request) string {
 
 // Make a copy of r, with the URL being changed to be relative to forwardURL,
 // and including only the headers in reflectedHeaderFields.
-func processRequest(forward string, payload io.Reader, Sessionid string) (*http.Request, error){
+func processRequest(forward string, payload io.Reader, Sessionid string) (*http.Request, error) {
 	u, err := url.Parse(forward)
 	if err != nil {
 		return nil, err
 	}
 	// Append the requested path to the path in forwardURL, so that
 	// forwardURL can be something like "https://example.com/reflect".
-	//u.Path = pathJoin(u.Path, r.URL.Path)	
+	//u.Path = pathJoin(u.Path, r.URL.Path)
 	//log.Print("URL is " + u.String())
 	c, err := http.NewRequest("POST", u.String(), payload)
 	if err != nil {
@@ -115,7 +115,7 @@ func loadserverkey(ctx appengine.Context) error {
 	//load key from datastore or memcache
 	var block *pem.Block
 	if item, err := memcache.Get(ctx, "serverpri"); err != memcache.ErrCacheMiss {
-        block, _ = pem.Decode(item.Value)
+		block, _ = pem.Decode(item.Value)
 	} else {
 		var record []Server
 		q := datastore.NewQuery("Server").Limit(1)
@@ -123,22 +123,22 @@ func loadserverkey(ctx appengine.Context) error {
 		if err != nil || len(record) == 0 {
 			ctx.Errorf("server key missing: %s", err)
 			//return fmt.Errorf("Error when searching for server keys")
-			
+
 		}
 		block, _ = pem.Decode([]byte(record[0].Private))
 		item = &memcache.Item{
-			Key:	"serverpri",
-			Value: 	[]byte(record[0].Private),
+			Key:   "serverpri",
+			Value: []byte(record[0].Private),
 		}
 		_ = memcache.Add(ctx, item)
 	}
-    serverpri, _ = x509.ParsePKCS1PrivateKey(block.Bytes)
-    return nil
+	serverpri, _ = x509.ParsePKCS1PrivateKey(block.Bytes)
+	return nil
 }
 
 func getpreviousindex(mainpw []byte, number int, ctx appengine.Context) ([]byte, string, error) {
 	var record []Endpoint
-	
+
 	// use memcache as buffer
 	q := datastore.NewQuery("Endpoint").Filter("IV =", string(mainpw[:])).Order("IV").Order("IDChar")
 	_, err := q.GetAll(ctx, &record)
@@ -149,11 +149,11 @@ func getpreviousindex(mainpw []byte, number int, ctx appengine.Context) ([]byte,
 		return nil, "", fmt.Errorf("Already enough connections")
 	} else {
 		if len(record) != 0 {
-		// method in doubt
+			// method in doubt
 			last, _ := strconv.Atoi(record[0].IDChar)
 			for _, rec := range record {
 				now, _ := strconv.Atoi(rec.IDChar)
-				if now-last >= 2{
+				if now-last >= 2 {
 					break
 				}
 				last = now
@@ -163,7 +163,6 @@ func getpreviousindex(mainpw []byte, number int, ctx appengine.Context) ([]byte,
 			return []byte(""), "0", nil
 		}
 	}
-
 
 }
 
@@ -207,7 +206,7 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	}
 	//try to load from memcache
 	q := datastore.NewQuery("Client").
-        Filter("Clientsha1 =", string(sha1[:]))
+		Filter("Clientsha1 =", string(sha1[:]))
 	t := q.Run(ctx)
 	_, err = t.Next(&record)
 	if err != nil {
@@ -217,12 +216,12 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	//write to memcache
 	sessionpassword := make([]byte, 16)
 	rand.Read(sessionpassword)
-	
+
 	//debug
 	//sessionpassword = []byte("aaaaaaaaaaaaaaaa")
 	pub_key, err := DecodePublicKey(record.Clientpub)
 	rsaPub, ok := pub_key.(*rsa.PublicKey)
-	if !ok||rsaPub == nil {
+	if !ok || rsaPub == nil {
 		return "", nil, "", "", "", "", fmt.Errorf("BAD key")
 	}
 
@@ -257,7 +256,7 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 
 func authverify(body *bufio.Reader, IDChar string, authstring string, IV string) error {
 	//verify if the Password is correct
-	value, _, err :=body.ReadLine()
+	value, _, err := body.ReadLine()
 	if err != nil {
 		return err
 	}
@@ -267,8 +266,8 @@ func authverify(body *bufio.Reader, IDChar string, authstring string, IV string)
 	}
 	stream := cipher.NewCFBDecrypter(aescipher, []byte(IV))
 	stream.XORKeyStream(value, value)
-	if bytes.Compare(bytes.TrimRight(value, "\x01"), []byte("2AUTHENTICATED" + IDChar)) != 0 {
-		return fmt.Errorf("AUTH FAIL %s\n",value)
+	if bytes.Compare(bytes.TrimRight(value, "\x01"), []byte("2AUTHENTICATED"+IDChar)) != 0 {
+		return fmt.Errorf("AUTH FAIL %s\n", value)
 	} else {
 		//TODO throw the rest to task queue?
 		return nil
@@ -283,38 +282,38 @@ func storestring(ctx appengine.Context, url string, Sessionid string, authstring
 	// error
 	var items []*memcache.Item
 	record := Endpoint{
-		Address:	url,
-		Password:   []byte(authstring),
-		IV:			IV,
-		Sessionid:  Sessionid,
-		IDChar:     IDChar,
+		Address:   url,
+		Password:  []byte(authstring),
+		IV:        IV,
+		Sessionid: Sessionid,
+		IDChar:    IDChar,
 	}
 	key := datastore.NewIncompleteKey(ctx, "Endpoint", nil)
 	_, err := datastore.Put(ctx, key, &record)
 	if err != nil {
-        return nil, fmt.Errorf("%s, %s, %s, %s", url, IV, Sessionid, IDChar)//err
-    }
-    items = append(items,
-    	&memcache.Item{
-    		Key:	Sessionid + ".Address",
-    		Value:	[]byte(url),
-    	},
-    	&memcache.Item{
-    		Key:	Sessionid + ".Password",
-    		Value:	[]byte(authstring),
-    	},
-    	&memcache.Item{
-    		Key:	Sessionid + ".IV",
-    		Value:	[]byte(IV),
-    	},
-    	&memcache.Item{
-    		Key:	Sessionid + ".IDChar",
-    		Value:	[]byte(IDChar),
-    	},
-    )
-    _ = memcache.AddMulti(ctx, items)
-    // TODO get status
-    return bytes.NewBuffer([]byte("")), nil
+		return nil, fmt.Errorf("%s, %s, %s, %s", url, IV, Sessionid, IDChar) //err
+	}
+	items = append(items,
+		&memcache.Item{
+			Key:   Sessionid + ".Address",
+			Value: []byte(url),
+		},
+		&memcache.Item{
+			Key:   Sessionid + ".Password",
+			Value: []byte(authstring),
+		},
+		&memcache.Item{
+			Key:   Sessionid + ".IV",
+			Value: []byte(IV),
+		},
+		&memcache.Item{
+			Key:   Sessionid + ".IDChar",
+			Value: []byte(IDChar),
+		},
+	)
+	_ = memcache.AddMulti(ctx, items)
+	// TODO get status
+	return bytes.NewBuffer([]byte("")), nil
 
 }
 
@@ -379,16 +378,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, err.Error())
 		return
 	}
-	reply ,err := storestring(context, forward, Sessionid, passwd, IV, IDChar)
+	reply, err := storestring(context, forward, Sessionid, passwd, IV, IDChar)
 	if err != nil {
 		context.Errorf("Saving: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	t := &taskqueue.Task {
-					Path:		"/excite/",
-					Method:		"POST",
-					Header:		map[string][]string{"SESSIONID": {Sessionid}},
+	t := &taskqueue.Task{
+		Path:   "/excite/",
+		Method: "POST",
+		Header: map[string][]string{"SESSIONID": {Sessionid}},
 	}
 	_, _ = taskqueue.Add(context, t, "excitation")
 	w.Header().Add("X-Session-Id", Sessionid)
@@ -405,7 +404,6 @@ func init() {
 	http.HandleFunc("/", handler)
 }
 
-
 /************************************************************
 Below adapted from https://github.com/ianmcmahon/encoding_ssh
 ************************************************************/
@@ -418,7 +416,9 @@ func readLength(data []byte) ([]byte, uint32, error) {
 	var length uint32
 
 	err := binary.Read(buf, binary.BigEndian, &length)
-	if err != nil { return nil, 0, err }
+	if err != nil {
+		return nil, 0, err
+	}
 
 	return data[4:], length, nil
 }
@@ -431,21 +431,32 @@ func readBigInt(data []byte, length uint32) ([]byte, *big.Int, error) {
 
 func getRsaValues(data []byte) (format string, e *big.Int, n *big.Int, err error) {
 	data, length, err := readLength(data)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
-	format = string(data[0:length]); data = data[length:]
+	format = string(data[0:length])
+	data = data[length:]
 
 	data, length, err = readLength(data)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	data, e, err = readBigInt(data, length)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	data, length, err = readLength(data)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	data, n, err = readBigInt(data, length)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	return
 }
@@ -456,15 +467,21 @@ func DecodePublicKey(str string) (interface{}, error) {
 
 	tokens := strings.Split(str, " ")
 
-	if len(tokens) < 2 { return nil, fmt.Errorf("Invalid key format; must contain at least two fields (keytype data [comment])") }
+	if len(tokens) < 2 {
+		return nil, fmt.Errorf("Invalid key format; must contain at least two fields (keytype data [comment])")
+	}
 
 	key_type := tokens[0]
 	data, err := base64.StdEncoding.DecodeString(tokens[1])
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	format, e, n, err := getRsaValues(data)
 
-	if format != key_type { return nil, fmt.Errorf("Key type said %s, but encoded format said %s.  These should match!", key_type, format) }
+	if format != key_type {
+		return nil, fmt.Errorf("Key type said %s, but encoded format said %s.  These should match!", key_type, format)
+	}
 
 	pubKey := &rsa.PublicKey{
 		N: n,
