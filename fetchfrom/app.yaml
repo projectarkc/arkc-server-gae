@@ -10,7 +10,7 @@ threadsafe: true
 handlers:
 - url: /.*
   script: arkc.application
-  secure: optional
+  secure: always
 
 libraries:
 - name: pycrypto

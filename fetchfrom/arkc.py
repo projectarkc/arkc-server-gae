@@ -8,23 +8,13 @@ from google.appengine.ext import ndb
 import logging
 import hashlib
 
-from goagent import process
+from goagent import process, NotFoundKey, GAEfail, PermanentFail, TimeoutFail, Nonsense
 
 from utils import AESCipher
 
 INITIAL_INDEX = 100000
 SPLIT_CHAR = chr(27) + chr(28) + chr(31)
 CLOSE_CHAR = chr(4) * 5
-
-
-class NotFoundKey(Exception):
-    pass
-
-class GAEfail(Exception):
-    pass
-
-class Nonsense(Exception):
-    pass
 
 
 class Endpoint(ndb.Model):
@@ -69,13 +59,25 @@ def application(environ, start_response):
         yield "HTTP 400\nBAD REQUEST\nkey not found\n"
         raise StopIteration
     except Nonsense:
-        start_response('202 Bad request', [('Content-Type', 'text/plain')])
-        yield "HTTP 202\nBAD REQUEST\nkey not found\n"
+        start_response('202 Accepted', [('Content-Type', 'text/plain')])
+        yield "HTTP 202\nAccepted\nMessage processed."
+        raise StopIteration
+    except GAEfail:
+        start_response('211 GAE FAIL', [('Content-Type', 'text/plain')])
+        yield "HTTP 211\nGAE FAIL\n"
+        raise StopIteration
+    except PermanentFail:
+        start_response('212 FETCH FAIL', [('Content-Type', 'text/plain')])
+        yield "HTTP 212\nFETCH FAIL\n"
+        raise StopIteration
+    except TimeoutFail:
+        start_response('211 GAE FAIL', [('Content-Type', 'text/plain')])
+        yield "HTTP 211\nGAE FAIL\n"
         raise StopIteration
 
     # TODO: to be finished
     start_response('200 OK', [('Content-Type', 'text/plain')])
-    yield ""
+    yield "Processed"
 
 
 def dataReceived(Sessionid, recv_data):
@@ -104,15 +106,22 @@ def dataReceived(Sessionid, recv_data):
     flag = int(text_dec[0])
     if flag == 0:
         reply, conn_id = client_recv(text_dec[1:])
-        rawpayload = '0' + conn_id + str(INITIAL_INDEX)
+        prefix = '0' + conn_id + str(INITIAL_INDEX)
+        rawpayload = ""
         for line in reply:
             rawpayload += line
             #print(line)
+        tosend = ""
+        if len(rawpayload) + len(prefix) > 4096:
+            while len(rawpayload) + len(prefix) > 4096:
+                tosend += prefix + rawpayload[:4096-len(prefix)]
+                rawpayload = rawpayload[:4096-len(prefix)]
+            tosend += prefix + rawpayload
         h = hashlib.sha1()
-        h.update(rawpayload)
-        print(rawpayload)
+        h.update(tosend)
+        #print(tosend)
         payloadHash = h.hexdigest()[16]
-        memcache.add(Sessionid + '.' + payloadHash, cipher.encrypt(rawpayload) + SPLIT_CHAR, 900)
+        memcache.add(Sessionid + '.' + payloadHash, cipher.encrypt(tosend) + SPLIT_CHAR, 900)
         taskqueue.add(queue_name="fetchback1", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
                       "PAYLOADHASH":payloadHash})
@@ -138,10 +147,7 @@ def client_recv(recv):
         # retransmit, do anything?
         pass
     else:
-        try:
-            return process(data), conn_id  # correct?
-        except Exception:
-            raise GAEfail
+        return process(data), conn_id  # correct?
 
 
 def getcipher(Sessionid):

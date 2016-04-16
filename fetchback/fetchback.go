@@ -109,7 +109,7 @@ func roundTripTry(addr Endpoint, key *datastore.Key, payload io.Reader, transpor
     return err
 }
 
-func process(task Endpoint, key *datastore.Key, payload io.Reader, ctx appengine.Context) error {
+func process(task Endpoint, key *datastore.Key, payload *bytes.Reader, ctx appengine.Context) error {
 	tp := urlfetch.Transport{
 			Context: ctx,
 			// Despite the name, Transport.Deadline is really a timeout and
@@ -117,8 +117,13 @@ func process(task Endpoint, key *datastore.Key, payload io.Reader, ctx appengine
 			// other words it is a time.Duration, not a time.Time.
 			Deadline: urlFetchTimeout,
 	}
-	
-	err := roundTripTry(task, key, payload, tp, ctx)
+	var err error
+	// every segment should be 4096
+	for payload.Len() > 4096 {
+		tosend := io.LimitReader(payload, 4096)
+		err = roundTripTry(task, key, tosend, tp, ctx)
+	}
+	err = roundTripTry(task, key, payload, tp, ctx)
 	return err
 }
 
@@ -133,20 +138,22 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	payloadHash := r.Header.Get("PAYLOADHASH")
 	item, err := memcache.Get(context, Sessionid + "." + payloadHash)
 	if err!= nil {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(211)
+		context.Errorf("Lost Packet in memcache %s, %s", Sessionid, payloadHash)
 		fmt.Fprintf(w, "Lost Packet in memcache %s, %s", Sessionid, payloadHash)
 		return
 	}
 	body := bytes.NewReader(item.Value)
 	item, err = memcache.Get(context, Sessionid + ".Address")
-	if err!=memcache.ErrCacheMiss {
+	if err!= nil {
 		q := datastore.NewQuery("Endpoint").Filter("Sessionid =", Sessionid)
 		t := q.Run(context)
 		key, err = t.Next(&record)
 		if err != nil {
 			// what to do?
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(212)
     		fmt.Fprintf(w, "")
+    		context.Errorf("Not found Sessionid %s", Sessionid)
 			fmt.Fprintf(w, "Not found Sessionid %s", Sessionid)
 			return
 		}
@@ -157,18 +164,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 		key = nil
 	}
-	
-	log.Printf("PROCESS")
 	err = process(record, key, body, context)
-	w.WriteHeader(http.StatusOK)
-    fmt.Fprintf(w, "")
 	if err != nil {
-		fmt.Fprintf(w, "Error when processing")
+		w.WriteHeader(213)
+    	fmt.Fprintf(w, "Error when processing")
 		return
 	} else {
 		//fail?, server error? or dump
 	}
-	
+	w.WriteHeader(http.StatusOK)
+    fmt.Fprintf(w, "")
 }
 	
 
