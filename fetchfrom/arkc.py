@@ -112,16 +112,16 @@ def dataReceived(Sessionid, recv_data):
             rawpayload += line
             #print(line)
         tosend = ""
-        if len(rawpayload) + len(prefix) > 4096:
-            while len(rawpayload) + len(prefix) > 4096:
-                tosend += prefix + rawpayload[:4096-len(prefix)]
-                rawpayload = rawpayload[:4096-len(prefix)]
-            tosend += prefix + rawpayload
+        while len(rawpayload) + len(prefix) + len(SPLIT_CHAR) > 4096:
+            tosend += cipher.encrypt(prefix + rawpayload[:4096-len(prefix)-len(SPLIT_CHAR)]) + SPLIT_CHAR
+            rawpayload = rawpayload[4096-len(prefix)-len(SPLIT_CHAR):]
+        tosend += cipher.encrypt(prefix + rawpayload) + SPLIT_CHAR
         h = hashlib.sha1()
         h.update(tosend)
         #print(tosend)
+        logging.info("%d sent to fetchback" % len(tosend))
         payloadHash = h.hexdigest()[16]
-        memcache.add(Sessionid + '.' + payloadHash, cipher.encrypt(tosend) + SPLIT_CHAR, 900)
+        memcache.add(Sessionid + '.' + payloadHash, tosend, 900)
         taskqueue.add(queue_name="fetchback1", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
                       "PAYLOADHASH":payloadHash})
