@@ -143,8 +143,8 @@ def format_response(status, headers, content):
     data = 'HTTP/1.1 %d %s\r\n%s\r\n\r\n%s' % (status, httplib.responses.get(
         status, 'Unknown'), '\r\n'.join('%s: %s' % (k.title(), v) for k, v in headers.items()), content)
     data = deflate(data)
-    assert len(data) <= 256 # BUG ARISE HERE, IMPORPER LENGTH
-    return struct.pack('!h', len(data)) + data
+    assert len(data) <= 65536
+    return "%04x" % len(data) + data
 
 
 def application(headers, body, method, url):
