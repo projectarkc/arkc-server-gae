@@ -38,7 +38,7 @@ import (
 const (
 	// A timeout of 0 means to use the App Engine default (5 seconds).
 	urlFetchTimeout        = 20 * time.Second
-	SPLIT                  = "\x1b\x1c\x1f"
+	SPLIT                  = "\x1b\x1c\x1b\x1c\x1f"
 	pollIntervalMultiplier = 1.5
 	initPollInterval       = 100
 	// Maximum polling interval.

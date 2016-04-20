@@ -15,7 +15,7 @@ from goagent import process, NotFoundKey, GAEfail, PermanentFail, TimeoutFail, N
 from utils import AESCipher
 
 INITIAL_INDEX = 100000
-SPLIT_CHAR = chr(27) + chr(28) + chr(31)
+SPLIT_CHAR = chr(27) + chr(28) + chr(27) + chr(28) + chr(31)
 CLOSE_CHAR = chr(4) * 5
 
 
@@ -110,23 +110,27 @@ def dataReceived(Sessionid, recv_data):
     if flag == 0:
         reply, conn_id = client_recv(text_dec[1:])
         prefix = '0' + conn_id + str(INITIAL_INDEX)
-        rawpayload = ""
-        for line in reply:
-            rawpayload += line
-            # print(line)
-        tosend = ""
+        rawpayload = reply
+        tosend = []
         rawpayload = wrap_response(rawpayload)
-        while len(rawpayload) + len(prefix) + len(SPLIT_CHAR) > 4096:
-            tosend += cipher.encrypt(
-                prefix + rawpayload[:4096 - len(prefix) - len(SPLIT_CHAR)]) + SPLIT_CHAR
-            rawpayload = rawpayload[4096 - len(prefix) - len(SPLIT_CHAR):]
-        tosend += cipher.encrypt(prefix + rawpayload) + SPLIT_CHAR
+        length = len(prefix) + len(SPLIT_CHAR)
+        length = 16 * (length // 16 + 1)
+        while len(rawpayload) +  length > 4096:
+            tosend.append(cipher.encrypt(
+                prefix + rawpayload[:4096 - length]))
+            rawpayload = rawpayload[4096 - length:]
+        tosend.append(cipher.encrypt(prefix + rawpayload))
+        tosend.append("")
+        for item in tosend:
+            assert len(item) % 16 == 0
+            logging.info(len(item))
+        result = SPLIT_CHAR.join(tosend)
         h = hashlib.sha1()
-        h.update(tosend)
+        h.update(result)
         # print(tosend)
-        logging.info("%d sent to fetchback" % len(tosend))
+        logging.info("%d sent to fetchback" % len(result))
         payloadHash = h.hexdigest()[16]
-        memcache.add(Sessionid + '.' + payloadHash, tosend, 900)
+        memcache.add(Sessionid + '.' + payloadHash, result, 900)
         taskqueue.add(queue_name="fetchback1", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
                                "PAYLOADHASH": payloadHash})
@@ -141,9 +145,6 @@ def wrap_response(payload):
     #resp.headers['Transfer-Encoding'] =  'chunked'
     #return str(resp) + '\x00\x00\x00\x00\x00'
 
-
-
-print 
 
 def client_recv(recv):
     """Handle request from client.

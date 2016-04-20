@@ -257,11 +257,11 @@ def application(headers, body, method, url):
             response_headers['Content-Encoding'] = 'deflate'
             data = deflate(data)
     response_headers['Content-Length'] = str(len(data))
-    yield format_response(status_code, response_headers, '')
-    yield data
+    return format_response(status_code, response_headers, '') + data
 
 
 def process(data):
     req = HTTPRequest(data)
     p = json.loads(''.join(req.rfile.readlines()))
+    logging.info("Access URL: " + p["url"])
     return application(p["headers"], p["body"], p["method"], p["url"])
