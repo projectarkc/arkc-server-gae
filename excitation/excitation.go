@@ -182,14 +182,20 @@ func handler_fetchback(w http.ResponseWriter, r *http.Request) {
 	if err != nil{
 		num = 0
 	}
-	buf := new(bytes.Buffer)
+	buf := bytes.NewBufferString("")
 	if num == 0{
 		item, err := memcache.Get(context, Sessionid+"."+payloadHash)
-		_, err = buf.Read(item.Value)
 		if err != nil {
 			w.WriteHeader(211)
 			context.Errorf("Lost Packet in memcache %s, %s", Sessionid, payloadHash)
 			fmt.Fprintf(w, "Lost Packet in memcache %s, %s", Sessionid, payloadHash)
+			return
+		}
+		_, err = buf.Write(item.Value)
+		if err != nil {
+			w.WriteHeader(214)
+			context.Errorf("%v", err)
+			fmt.Fprintf(w, "Error when processing")
 			return
 		}
 	} else {
@@ -197,11 +203,17 @@ func handler_fetchback(w http.ResponseWriter, r *http.Request) {
 		counter = 0
 		for counter <= num {
 			item, err := memcache.Get(context, Sessionid+"."+ payloadHash + strconv.Itoa(counter))
-			_, err = buf.Read(item.Value)
 			if err != nil {
 				w.WriteHeader(211)
 				context.Errorf("Lost Packet in memcache %s, %s", Sessionid, payloadHash)
 				fmt.Fprintf(w, "Lost Packet in memcache %s, %s", Sessionid, payloadHash)
+				return
+			}
+			_, err = buf.Write(item.Value)
+			if err != nil {
+				w.WriteHeader(214)
+				context.Errorf("%v", err)
+				fmt.Fprintf(w, "Error when processing")
 				return
 			}
 		}
@@ -230,6 +242,7 @@ func handler_fetchback(w http.ResponseWriter, r *http.Request) {
 	err = process_fetchback(record, key, body, context)
 	if err != nil {
 		w.WriteHeader(213)
+		context.Errorf("%v", err)
 		fmt.Fprintf(w, "Error when processing")
 		return
 	} else {

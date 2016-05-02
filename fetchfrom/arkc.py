@@ -129,7 +129,7 @@ def dataReceived(Sessionid, recv_data):
         h.update(result)
         # print(tosend)
         logging.info("%d sent to fetchback" % len(result))
-        payloadHash = h.hexdigest()[16]
+        payloadHash = h.hexdigest()[:16]
         add2mem = dict()
         i = 0
         while len(result) > memcache.MAX_VALUE_SIZE:
