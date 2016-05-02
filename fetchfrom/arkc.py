@@ -115,7 +115,7 @@ def dataReceived(Sessionid, recv_data):
         rawpayload = wrap_response(rawpayload)
         length = len(prefix) + len(SPLIT_CHAR)
         length = 16 * (length // 16 + 1)
-        while len(rawpayload) +  length > 4096:
+        while len(rawpayload) + length > 4096:
             tosend.append(cipher.encrypt(
                 prefix + rawpayload[:4096 - length]))
             rawpayload = rawpayload[4096 - length:]
@@ -130,20 +130,32 @@ def dataReceived(Sessionid, recv_data):
         # print(tosend)
         logging.info("%d sent to fetchback" % len(result))
         payloadHash = h.hexdigest()[16]
-        memcache.add(Sessionid + '.' + payloadHash, result, 900)
+        add2mem = dict()
+        i = 0
+        while len(result) > memcache.MAX_VALUE_SIZE:
+            add2mem[str(i)] = result[:memcache.MAX_VALUE_SIZE]
+            result = result[memcache.MAX_VALUE_SIZE:]
+            i += 1
+        add2mem[str(i)] = result
+        if len(add2mem) == 1:
+            memcache.add(Sessionid + '.' + payloadHash, add2mem['0'], 900)
+        else:
+            memcache.add_multi(
+                add2mem, time=900, key_prefix=Sessionid + '.' + payloadHash)
         taskqueue.add(queue_name="fetchback1", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
-                               "PAYLOADHASH": payloadHash})
+                               "PAYLOADHASH": payloadHash, "NUM": str(i)})
+
 
 def wrap_response(payload):
     # Keep Alive?
-    return payload  + '\x00\x00\x00\x00\x00'
+    return payload + '\x00\x00\x00\x00\x00'
     #resp = Response()
     #resp.status = 200
     #resp.body = payload
     #resp.headers['Connection'] = 'close'
     #resp.headers['Transfer-Encoding'] =  'chunked'
-    #return str(resp) + '\x00\x00\x00\x00\x00'
+    # return str(resp) + '\x00\x00\x00\x00\x00'
 
 
 def client_recv(recv):

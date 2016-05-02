@@ -178,15 +178,36 @@ func handler_fetchback(w http.ResponseWriter, r *http.Request) {
 
 	Sessionid := r.Header.Get("SESSIONID")
 	payloadHash := r.Header.Get("PAYLOADHASH")
-	item, err := memcache.Get(context, Sessionid+"."+payloadHash)
-	if err != nil {
-		w.WriteHeader(211)
-		context.Errorf("Lost Packet in memcache %s, %s", Sessionid, payloadHash)
-		fmt.Fprintf(w, "Lost Packet in memcache %s, %s", Sessionid, payloadHash)
-		return
+	num, err := strconv.Atoi(r.Header.Get("NUM"))
+	if err != nil{
+		num = 0
 	}
-	body := bytes.NewReader(item.Value)
-	item, err = memcache.Get(context, Sessionid+".Address")
+	buf := new(bytes.Buffer)
+	if num == 0{
+		item, err := memcache.Get(context, Sessionid+"."+payloadHash)
+		_, err = buf.Read(item.Value)
+		if err != nil {
+			w.WriteHeader(211)
+			context.Errorf("Lost Packet in memcache %s, %s", Sessionid, payloadHash)
+			fmt.Fprintf(w, "Lost Packet in memcache %s, %s", Sessionid, payloadHash)
+			return
+		}
+	} else {
+		var counter int
+		counter = 0
+		for counter <= num {
+			item, err := memcache.Get(context, Sessionid+"."+ payloadHash + strconv.Itoa(counter))
+			_, err = buf.Read(item.Value)
+			if err != nil {
+				w.WriteHeader(211)
+				context.Errorf("Lost Packet in memcache %s, %s", Sessionid, payloadHash)
+				fmt.Fprintf(w, "Lost Packet in memcache %s, %s", Sessionid, payloadHash)
+				return
+			}
+		}
+	}
+	body := bytes.NewReader(buf.Bytes())
+	item, err := memcache.Get(context, Sessionid+".Address")
 	if err != nil {
 		q := datastore.NewQuery("Endpoint").Filter("Sessionid =", Sessionid)
 		t := q.Run(context)
