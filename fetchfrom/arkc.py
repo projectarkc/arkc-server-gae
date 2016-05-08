@@ -18,6 +18,8 @@ INITIAL_INDEX = 100000
 SPLIT_CHAR = chr(27) + chr(28) + chr(27) + chr(28) + chr(31)
 CLOSE_CHAR = chr(4) * 5
 
+chunksize = 4101
+
 
 class Endpoint(ndb.Model):
     Address = ndb.StringProperty(required=True)
@@ -113,12 +115,11 @@ def dataReceived(Sessionid, recv_data):
         rawpayload = reply
         tosend = []
         rawpayload = wrap_response(rawpayload)
-        length = len(prefix) + len(SPLIT_CHAR)
-        length = 16 * (length // 16 + 1)
-        while len(rawpayload) + length > 4096:
+        length = len(prefix) + len(SPLIT_CHAR) + 1
+        while len(rawpayload) + length > chunksize:
             tosend.append(cipher.encrypt(
-                prefix + rawpayload[:4096 - length]))
-            rawpayload = rawpayload[4096 - length:]
+                prefix + rawpayload[:chunksize - length]))
+            rawpayload = rawpayload[chunksize - length:]
         tosend.append(cipher.encrypt(prefix + rawpayload))
         tosend.append("")
         for item in tosend:

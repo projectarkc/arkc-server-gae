@@ -160,10 +160,19 @@ func process_fetchback(task Endpoint, key *datastore.Key, payload *bytes.Reader,
 		Deadline: urlFetchTimeout,
 	}
 	var err error
-	// every segment should be 4096
-	for payload.Len() > 4096 {
-		tosend := io.LimitReader(payload, 4096)
-		err = roundTripTry_fetchback(task, key, tosend, tp, ctx)
+	err = nil
+	if payload.Len() >= 1000000 {
+		for {
+			temp1 := make([]byte, 998238) // multiple of 4101
+			_, err = payload.Read(temp1)
+			tosend := bytes.NewBuffer(temp1)
+			if err != nil {
+				break
+			}
+			err = roundTripTry_fetchback(task, key, tosend, tp, ctx)
+		}
+	} else {
+		err = roundTripTry_fetchback(task, key, payload, tp, ctx)
 	}
 	err = roundTripTry_fetchback(task, key, payload, tp, ctx)
 	return err
