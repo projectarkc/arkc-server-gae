@@ -165,22 +165,35 @@ func process_fetchback(task Endpoint, key *datastore.Key, payload *bytes.Reader,
 		// other words it is a time.Duration, not a time.Time.
 		Deadline: urlFetchTimeout,
 	}
-	var err error
-	err = nil
+	var err2 error
+	flag := false
+	err2 = nil
 	if payload.Len() >= 1000000 {
 		for {
 			temp1 := make([]byte, 998238) // multiple of 4101
-			_, err = payload.Read(temp1)
+			_, err2 = payload.Read(temp1)
 			tosend := bytes.NewBuffer(temp1)
-			if err != nil {
+			if err2 != nil {
 				break
 			}
-			err = roundTripTry_fetchback(task, key, tosend, tp, ctx)
+			err := roundTripTry_fetchback(task, key, tosend, tp, ctx)
+			if err != nil {
+				flag = true
+				ctx.Infof("%v", err)
+			}
 		}
 	} else {
-		err = roundTripTry_fetchback(task, key, payload, tp, ctx)
+		err := roundTripTry_fetchback(task, key, payload, tp, ctx)
+		if err != nil {
+			flag = true
+			ctx.Infof("%v", err)
+		}
 	}
-	return err
+	if flag {
+		return fmt.Errorf("Error occurred when processing fetchback.")
+	} else {
+		return nil
+	}
 }
 
 func handler_fetchback(w http.ResponseWriter, r *http.Request) {
@@ -230,6 +243,7 @@ func handler_fetchback(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "Error when processing")
 				return
 			}
+			counter++
 		}
 	}
 	body := bytes.NewReader(buf.Bytes())
@@ -256,7 +270,7 @@ func handler_fetchback(w http.ResponseWriter, r *http.Request) {
 	err = process_fetchback(record, key, body, context)
 	if err != nil {
 		w.WriteHeader(213)
-		context.Errorf("%v", err)
+		context.Errorf("Error when processing %v", err)
 		fmt.Fprintf(w, "Error when processing")
 		return
 	} else {
