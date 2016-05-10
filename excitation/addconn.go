@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-	//otp "./go-otp"
-	encoding_ssh "./encoding_ssh"
+	//otp "go-otp"
+	encoding_ssh "ssh"
 
 	"crypto"
 	"crypto/aes"
