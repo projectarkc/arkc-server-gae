@@ -80,12 +80,18 @@ func roundTripTry_fetchback(addr Endpoint, key *datastore.Key, payload io.Reader
 	}
 	fr.Header.Add("X-Session-Id", addr.Sessionid)
 	resp, err := transport.RoundTrip(fr)
-	log.Printf("RoundTrip")
 	if err != nil {
 		ctx.Errorf("connect: %s", err)
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf("Post failed, %v", resp.Status)
+		ctx.Errorf("%s", err)
+		return err
+	} else {
+		log.Printf("RoundTrip %s", resp.Status)
+	}
 	if resp.ContentLength == 24 {
 		tmpbuf := new(bytes.Buffer)
 		_, err = tmpbuf.ReadFrom(resp.Body)
@@ -174,7 +180,6 @@ func process_fetchback(task Endpoint, key *datastore.Key, payload *bytes.Reader,
 	} else {
 		err = roundTripTry_fetchback(task, key, payload, tp, ctx)
 	}
-	err = roundTripTry_fetchback(task, key, payload, tp, ctx)
 	return err
 }
 

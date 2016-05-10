@@ -53,15 +53,10 @@ def application(environ, start_response):
 
     try:
         dataReceived(sessionid, input_data)
-    # except GAEfail:
-        #start_response('400 Bad request', [('Content-Type', 'text/plain')])
-    #    start_response('200 Bad request', [('Content-Type', 'text/plain')])
-    #    yield "HTTP 400\nBAD REQUEST\ndon't work with GoAgent\n"
-    #    raise StopIteration
     except NotFoundKey:
         #start_response('400 Bad request', [('Content-Type', 'text/plain')])
-        start_response('200 Bad request', [('Content-Type', 'text/plain')])
-        yield "HTTP 400\nBAD REQUEST\nkey not found\n"
+        start_response('210 Bad request', [('Content-Type', 'text/plain')])
+        yield "HTTP 210\nBAD REQUEST\nkey not found\n"
         raise StopIteration
     except Nonsense:
         start_response('202 Accepted', [('Content-Type', 'text/plain')])

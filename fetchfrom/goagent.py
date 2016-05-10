@@ -258,6 +258,7 @@ def application(headers, body, method, url):
             response_headers['Content-Encoding'] = 'deflate'
             data = deflate(data)
     response_headers['Content-Length'] = str(len(data))
+    logging.info("Goagent:: Get %d data and sent.", len(data))
     return format_response(status_code, response_headers, '') + data
 
 
