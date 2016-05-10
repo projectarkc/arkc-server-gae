@@ -5,18 +5,16 @@ package excitation
 import (
 	"bufio"
 	"bytes"
-	"encoding/base64"
-	"encoding/binary"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 	"log"
+	//otp "./go-otp"
+	encoding_ssh "./encoding_ssh"
 
 	"crypto"
 	"crypto/aes"
@@ -517,7 +515,7 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 
 	//debug
 	//sessionpassword = []byte("aaaaaaaaaaaaaaaa")
-	pub_key, err := DecodePublicKey(record.Clientpub)
+	pub_key, err := encoding_ssh.DecodePublicKey(record.Clientpub)
 	rsaPub, ok := pub_key.(*rsa.PublicKey)
 	if !ok || rsaPub == nil {
 		return "", nil, "", "", "", "", fmt.Errorf("BAD key")
@@ -767,94 +765,3 @@ func init() {
 	http.HandleFunc("/fetchback/", handler_fetchback)
 	http.HandleFunc("/fetchback", handler_fetchback)
 }
-
-
-/************************************************************
-Below adapted from https://github.com/ianmcmahon/encoding_ssh
-************************************************************/
-
-func readLength(data []byte) ([]byte, uint32, error) {
-	l_buf := data[0:4]
-
-	buf := bytes.NewBuffer(l_buf)
-
-	var length uint32
-
-	err := binary.Read(buf, binary.BigEndian, &length)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return data[4:], length, nil
-}
-
-func readBigInt(data []byte, length uint32) ([]byte, *big.Int, error) {
-	var bigint = new(big.Int)
-	bigint.SetBytes(data[0:length])
-	return data[length:], bigint, nil
-}
-
-func getRsaValues(data []byte) (format string, e *big.Int, n *big.Int, err error) {
-	data, length, err := readLength(data)
-	if err != nil {
-		return
-	}
-
-	format = string(data[0:length])
-	data = data[length:]
-
-	data, length, err = readLength(data)
-	if err != nil {
-		return
-	}
-
-	data, e, err = readBigInt(data, length)
-	if err != nil {
-		return
-	}
-
-	data, length, err = readLength(data)
-	if err != nil {
-		return
-	}
-
-	data, n, err = readBigInt(data, length)
-	if err != nil {
-		return
-	}
-
-	return
-}
-
-func DecodePublicKey(str string) (interface{}, error) {
-	// comes in as a three part string
-	// split into component parts
-
-	tokens := strings.Split(str, " ")
-
-	if len(tokens) < 2 {
-		return nil, fmt.Errorf("Invalid key format; must contain at least two fields (keytype data [comment])")
-	}
-
-	key_type := tokens[0]
-	data, err := base64.StdEncoding.DecodeString(tokens[1])
-	if err != nil {
-		return nil, err
-	}
-
-	format, e, n, err := getRsaValues(data)
-
-	if format != key_type {
-		return nil, fmt.Errorf("Key type said %s, but encoded format said %s.  These should match!", key_type, format)
-	}
-
-	pubKey := &rsa.PublicKey{
-		N: n,
-		E: int(e.Int64()),
-	}
-
-	return pubKey, nil
-}
-
-
-
