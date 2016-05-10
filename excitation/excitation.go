@@ -75,19 +75,19 @@ var reflectedHeaderFields = []string{
 func roundTripTry_fetchback(addr Endpoint, key *datastore.Key, payload io.Reader, transport urlfetch.Transport, ctx appengine.Context) error {
 	fr, err := http.NewRequest("POST", addr.Address, payload) // TODO type?
 	if err != nil {
-		ctx.Errorf("create request: %s", err)
+		ctx.Infof("create request: %s", err)
 		return err
 	}
 	fr.Header.Add("X-Session-Id", addr.Sessionid)
 	resp, err := transport.RoundTrip(fr)
 	if err != nil {
-		ctx.Errorf("connect: %s", err)
+		ctx.Infof("connect: %s", err)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		err = fmt.Errorf("Post failed, %v", resp.Status)
-		ctx.Errorf("%s", err)
+		ctx.Infof("%s", err)
 		return err
 	} else {
 		log.Printf("RoundTrip %s", resp.Status)
@@ -96,7 +96,7 @@ func roundTripTry_fetchback(addr Endpoint, key *datastore.Key, payload io.Reader
 		tmpbuf := new(bytes.Buffer)
 		_, err = tmpbuf.ReadFrom(resp.Body)
 		if err != nil {
-			ctx.Errorf("reading from Body: %s", err)
+			ctx.Infof("reading from Body: %s", err)
 			return err
 		}
 		if tmpbuf.String() == "@@@@CONNECTION CLOSE@@@@" {
@@ -115,7 +115,7 @@ func roundTripTry_fetchback(addr Endpoint, key *datastore.Key, payload io.Reader
 	buf := new(bytes.Buffer)
 	_, err = buf.ReadFrom(resp.Body)
 	if err != nil {
-		ctx.Errorf("reading from Body: %s", err)
+		ctx.Infof("reading from Body: %s", err)
 		return err
 	}
 	if buf.Len() > 0 {
@@ -242,7 +242,7 @@ func handler_fetchback(w http.ResponseWriter, r *http.Request) {
 			// what to do?
 			w.WriteHeader(212)
 			fmt.Fprintf(w, "")
-			context.Errorf("Not found Sessionid %s", Sessionid)
+			context.Infof("Not found Sessionid %s", Sessionid)
 			fmt.Fprintf(w, "Not found Sessionid %s", Sessionid)
 			return
 		}
@@ -270,13 +270,13 @@ func roundTripTry(addr *Endpoint, key *datastore.Key, transport urlfetch.Transpo
 	// TODO: What to send here?
 	fr, err := http.NewRequest("POST", addr.Address, bytes.NewReader([]byte("")))
 	if err != nil {
-		ctx.Errorf("create request: %s", err)
+		ctx.Infof("create request: %s", err)
 		return nil, false, err
 	}
 	fr.Header.Add("X-Session-Id", addr.Sessionid)
 	resp, err := transport.RoundTrip(fr)
 	if err != nil {
-		ctx.Errorf("connect: %s", err)
+		ctx.Infof("connect: %s", err)
 		return nil, false, err
 	}
 	defer resp.Body.Close()
@@ -405,7 +405,7 @@ func loadserverkey(ctx appengine.Context) error {
 		q := datastore.NewQuery("Server").Limit(1)
 		_, err = q.GetAll(ctx, &record)
 		if err != nil || len(record) == 0 {
-			ctx.Errorf("server key missing: %s", err)
+			ctx.Criticalf("server key missing: %s", err)
 			//return fmt.Errorf("Error when searching for server keys")
 
 		}
@@ -496,7 +496,7 @@ func getauthstring(body *bufio.Reader, ctx appengine.Context) (string, io.Reader
 	if err != nil {
 		return "", nil, "", "", "", "", err
 	}
-	//ctx.Errorf("%s, %s, %s", record.Clientpub, record.Clientsha1, record.Clientprisha1)
+	//ctx.Infof("%s, %s, %s", record.Clientpub, record.Clientsha1, record.Clientprisha1)
 	//write to memcache
 	sessionpassword := make([]byte, 16)
 	rand.Read(sessionpassword)
