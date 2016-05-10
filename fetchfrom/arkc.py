@@ -117,14 +117,12 @@ def dataReceived(Sessionid, recv_data):
             rawpayload = rawpayload[chunksize - length:]
         tosend.append(cipher.encrypt(prefix + rawpayload))
         tosend.append("")
-        for item in tosend:
-            assert len(item) % 16 == 0
-            logging.info(len(item))
+        #logging.info(len(item))
         result = SPLIT_CHAR.join(tosend)
         h = hashlib.sha1()
         h.update(result)
         # print(tosend)
-        logging.info("%d sent to fetchback" % len(result))
+        #logging.info("%d sent to fetchback" % len(result))
         payloadHash = h.hexdigest()[:16]
         add2mem = dict()
         i = 0
@@ -141,6 +139,7 @@ def dataReceived(Sessionid, recv_data):
         taskqueue.add(queue_name="fetchback1", url="/fetchback/",
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
                                "PAYLOADHASH": payloadHash, "NUM": str(i)})
+        #logging.info("Memcached at %s.%s", Sessionid, payloadHash)
 
 
 def wrap_response(payload):
