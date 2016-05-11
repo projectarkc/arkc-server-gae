@@ -107,29 +107,19 @@ func process_fetchback(task Endpoint, key *datastore.Key, payload *bytes.Reader,
 		// other words it is a time.Duration, not a time.Time.
 		Deadline: urlFetchTimeout,
 	}
-	var err2 error
 	flag := false
-	err2 = nil
-	if payload.Len() >= 1000000 {
-		for {
-			temp1 := make([]byte, 998238) // multiple of 4101
-			_, err2 = payload.Read(temp1)
-			tosend := bytes.NewBuffer(temp1)
-			if err2 != nil {
-				break
-			}
-			err := roundTripTry_fetchback(task, key, tosend, tp, ctx)
-			if err != nil {
-				flag = true
-				ctx.Infof("%v", err)
-			}
-		}
-	} else {
-		err := roundTripTry_fetchback(task, key, payload, tp, ctx)
+	for payload.Len() >= 998238 {
+		tosend := io.LimitReader(payload, 998238)
+		err := roundTripTry_fetchback(task, key, tosend, tp, ctx)
 		if err != nil {
 			flag = true
 			ctx.Infof("%v", err)
 		}
+	}
+	err := roundTripTry_fetchback(task, key, payload, tp, ctx)
+	if err != nil {
+		flag = true
+		ctx.Infof("%v", err)
 	}
 	if flag {
 		return fmt.Errorf("Error occurred when processing fetchback.")
