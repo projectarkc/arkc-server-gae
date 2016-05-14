@@ -109,13 +109,13 @@ def dataReceived(Sessionid, recv_data):
         prefix = '0' + conn_id + str(INITIAL_INDEX)
         rawpayload = reply
         tosend = []
-        rawpayload = wrap_response(rawpayload)
         length = len(prefix) + len(SPLIT_CHAR) + 1
         while len(rawpayload) + length > chunksize:
             tosend.append(cipher.encrypt(
                 prefix + rawpayload[:chunksize - length]))
             rawpayload = rawpayload[chunksize - length:]
         tosend.append(cipher.encrypt(prefix + rawpayload))
+        tosend.append(cipher.encrypt(prefix + CLOSE_CHAR))
         tosend.append("")
         #logging.info(len(item))
         result = SPLIT_CHAR.join(tosend)
@@ -140,18 +140,6 @@ def dataReceived(Sessionid, recv_data):
                       headers={"Sessionid": Sessionid, "IDChar": conn_id,
                                "PAYLOADHASH": payloadHash, "NUM": str(i)})
         #logging.info("Memcached at %s.%s", Sessionid, payloadHash)
-
-
-def wrap_response(payload):
-    # Keep Alive?
-    return payload + '\x00\x00\x00\x00\x00'
-    #resp = Response()
-    #resp.status = 200
-    #resp.body = payload
-    #resp.headers['Connection'] = 'close'
-    #resp.headers['Transfer-Encoding'] =  'chunked'
-    # return str(resp) + '\x00\x00\x00\x00\x00'
-
 
 def client_recv(recv):
     """Handle request from client.
