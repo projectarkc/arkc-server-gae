@@ -109,7 +109,7 @@ def dataReceived(Sessionid, recv_data):
         prefix = '0' + conn_id + str(INITIAL_INDEX)
         rawpayload = reply
         tosend = []
-        length = len(prefix) + len(SPLIT_CHAR) + 1
+        length = len(prefix) + len(SPLIT_CHAR) + 17
         while len(rawpayload) + length > chunksize:
             tosend.append(cipher.encrypt(
                 prefix + rawpayload[:chunksize - length]))
