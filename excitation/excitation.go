@@ -116,6 +116,13 @@ func processendpoints(task *Endpoint, key *datastore.Key, ctx appengine.Context)
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	context := appengine.NewContext(r)
+
+	if r.Method == "GET" {
+		w.WriteHeader(200)
+		fmt.Fprintf(w, "Excitation ready to use")
+		return
+	}
+
 	Sessionid := r.Header.Get("SESSIONID")
 	task, key := getstatus(context, Sessionid)
 	if task == nil {

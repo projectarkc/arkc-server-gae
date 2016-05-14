@@ -135,6 +135,15 @@ func handler_fetchback(w http.ResponseWriter, r *http.Request) {
 
 	//try to get more data?
 
+	//verfity?
+	
+	if r.Method == "GET" {
+		w.WriteHeader(200)
+		fmt.Fprintf(w, "Warm up done")
+		return
+	}
+
+
 	Sessionid := r.Header.Get("SESSIONID")
 	payloadHash := r.Header.Get("PAYLOADHASH")
 	num, err := strconv.Atoi(r.Header.Get("NUM"))

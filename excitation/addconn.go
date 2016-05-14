@@ -326,7 +326,20 @@ func handler_addconn(w http.ResponseWriter, r *http.Request) {
 		Method: "POST",
 		Header: map[string][]string{"SESSIONID": {Sessionid}},
 	}
-	_, _ = taskqueue.Add(context, t, "excitation")
+	taskqueue.Add(context, t, "excitation")
+
+	//warm up
+	t = &taskqueue.Task{
+		Path:   "/fetchfrom/",
+		Method: "GET",
+	}
+	taskqueue.Add(context, t, "fetchfrom1")
+	t = &taskqueue.Task{
+		Path:   "/fetchback/",
+		Method: "GET",
+	}
+	taskqueue.Add(context, t, "fetchback1")
+
 	w.Header().Add("X-Session-Id", Sessionid)
 	w.WriteHeader(resp.StatusCode)
 	n, err := io.Copy(w, reply)
